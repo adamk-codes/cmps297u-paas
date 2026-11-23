@@ -7,6 +7,8 @@ import { SignIn } from './pages/SignIn'
 import { Apps } from './pages/Apps'
 import { AppDetail } from './pages/AppDetail'
 import { Backups } from './pages/Backups'
+import { Activity } from './pages/Activity'
+import { Costs } from './pages/Costs'
 import { Settings } from './pages/Settings'
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -45,6 +47,8 @@ export default function App() {
             <Route path="/apps" element={<Apps />} />
             <Route path="/apps/:appId" element={<AppDetail />} />
             <Route path="/backups" element={<Backups />} />
+            <Route path="/activity" element={<Activity />} />
+            <Route path="/costs" element={<Costs />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Route>

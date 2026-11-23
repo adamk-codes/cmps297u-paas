@@ -319,7 +319,7 @@ export function AppDetail() {
                       <span className="capitalize">{b.trigger}</span>· {formatBytes(b.sizeBytes)} ·
                       <span className="font-mono">{b.image.tag}</span>
                       {b.verifiedAt && (
-                        <span className="flex items-center gap-1 text-emerald-700">
+                        <span className="flex items-center gap-1 text-recover-dark">
                           <BadgeCheck className="size-3.5" /> Verified
                         </span>
                       )}

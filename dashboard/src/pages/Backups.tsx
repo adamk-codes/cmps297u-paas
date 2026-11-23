@@ -83,7 +83,7 @@ export function Backups() {
           role="status"
           className={cx(
             'mb-6 rounded-lg border px-4 py-3 text-sm',
-            notice.kind === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700',
+            notice.kind === 'ok' ? 'border-recover/30 bg-recover-soft text-recover-dark' : 'border-red-200 bg-red-50 text-red-700',
           )}
         >
           {notice.text}
@@ -95,7 +95,7 @@ export function Backups() {
         <Card className="p-6">
           <div className="flex items-start justify-between">
             <h2 className="text-[17px] font-medium">Backups stored</h2>
-            <div className="grid size-10 place-items-center rounded-md bg-indigo-100 text-blue-700">
+            <div className="grid size-10 place-items-center rounded-md bg-recover-soft text-recover-dark">
               <Database className="size-5" />
             </div>
           </div>
@@ -108,7 +108,7 @@ export function Backups() {
         <Card className="p-6">
           <div className="flex items-start justify-between">
             <h2 className="text-[17px] font-medium">Last verified restore</h2>
-            <div className="grid size-10 place-items-center rounded-md bg-emerald-300 text-emerald-900">
+            <div className="grid size-10 place-items-center rounded-md bg-recover-soft text-recover-dark">
               <Timer className="size-5" />
             </div>
           </div>
@@ -205,7 +205,7 @@ export function Backups() {
                     <td className="px-3 py-3.5 text-slate-700">{formatBytes(b.sizeBytes)}</td>
                     <td className="px-3 py-3.5">
                       {b.verifiedAt ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-recover-soft px-2.5 py-1 text-xs font-medium text-recover-dark">
                           <BadgeCheck className="size-4" /> Verified {timeAgo(b.verifiedAt)}
                         </span>
                       ) : (
@@ -238,7 +238,7 @@ export function Backups() {
                 <li key={r.id} className="px-5 py-3.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="flex items-center gap-2 font-medium text-slate-900">
-                      <BadgeCheck className="size-4 text-emerald-600" /> {r.appName}
+                      <BadgeCheck className="size-4 text-recover" /> {r.appName}
                     </p>
                     <span className="text-xs text-slate-500">{formatUtc(r.startedAt)}</span>
                   </div>
@@ -247,7 +247,7 @@ export function Backups() {
                     <span className="font-mono text-xs">{r.targetDatabase}</span>
                   </p>
                   <p className="mt-1 flex items-center gap-1">
-                    <a href={r.recoveryUrl} target="_blank" rel="noreferrer" className="truncate font-mono text-xs text-blue-700 hover:underline">
+                    <a href={r.recoveryUrl} target="_blank" rel="noreferrer" className="truncate font-mono text-xs text-recover-dark hover:underline">
                       {r.recoveryUrl}
                     </a>
                     <CopyButton value={r.recoveryUrl} label="Copy recovery URL" />

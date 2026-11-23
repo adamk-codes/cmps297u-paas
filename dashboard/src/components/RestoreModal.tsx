@@ -49,7 +49,7 @@ export function RestoreModal({
 
   return (
     <Modal title={`Restore ${backup.appName}`} onClose={onClose}>
-      <p className="font-mono text-xs font-medium tracking-wider text-blue-700 uppercase">Recovery workbench · us-east-1</p>
+      <p className="font-mono text-xs font-medium tracking-wider text-recover-dark uppercase">Recovery workbench · us-east-1</p>
       <p className="mt-1 text-[15px] text-slate-600">
         The backup is restored into a new database and checked with the app image it was taken with.
       </p>
@@ -86,31 +86,31 @@ export function RestoreModal({
       )}
 
       {result && op?.status === 'succeeded' && (
-        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <p className="flex items-center gap-2 font-semibold text-emerald-800">
+        <div className="mt-4 rounded-xl border border-recover/30 bg-recover-soft p-4">
+          <p className="flex items-center gap-2 font-semibold text-recover-dark">
             <BadgeCheck className="size-5" /> Restore verified
           </p>
           <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-emerald-700">Records checked</dt>
+              <dt className="text-recover-dark">Records checked</dt>
               <dd className="font-medium text-slate-900">{result.recordsChecked.toLocaleString()}</dd>
             </div>
             <div>
-              <dt className="text-emerald-700">Recovery time</dt>
+              <dt className="text-recover-dark">Recovery time</dt>
               <dd className="font-medium text-slate-900">{formatDuration(result.durationSeconds)}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-emerald-700">Restored database</dt>
+              <dt className="text-recover-dark">Restored database</dt>
               <dd className="truncate font-mono text-[13px] text-slate-900">{result.targetDatabase}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-emerald-700">Recovery URL</dt>
+              <dt className="text-recover-dark">Recovery URL</dt>
               <dd className="flex items-center gap-1">
                 <a
                   href={result.recoveryUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="truncate font-mono text-[13px] text-blue-700 hover:underline"
+                  className="truncate font-mono text-[13px] text-recover-dark hover:underline"
                 >
                   {result.recoveryUrl}
                 </a>
@@ -136,7 +136,7 @@ export function RestoreModal({
             <Button variant="secondary" onClick={onClose}>
               {started ? 'Hide' : 'Cancel'}
             </Button>
-            <Button onClick={start} disabled={submitting || started}>
+            <Button variant="recover" onClick={start} disabled={submitting || started}>
               {submitting || running ? <Spinner /> : <RotateCcw className="size-4" />}
               {running ? 'Restoring…' : 'Start restore'}
             </Button>
@@ -147,7 +147,7 @@ export function RestoreModal({
             href={result.recoveryUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-recover px-4 text-sm font-medium text-white hover:bg-recover-dark"
           >
             Open recovery app <ExternalLink className="size-4" />
           </a>

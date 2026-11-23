@@ -3,6 +3,31 @@
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-navy: #0F172A;
+  --color-brand: #1D7FE6;
+  --color-brand-soft: #E8F2FD;
+  --color-recover: #0EA5B0;
+  --color-recover-soft: #E6F6F7;
+  --color-recover-dark: #0B7F88;
+
+  --color-blue-50: #EEF6FE;
+  --color-blue-100: #D9EBFC;
+  --color-blue-200: #B6D8FA;
+  --color-blue-300: #84BEF5;
+  --color-blue-400: #4C9EEE;
+  --color-blue-500: #2A8AE9;
+  --color-blue-600: #1D7FE6;
+  --color-blue-700: #1766BA;
+  --color-blue-800: #16538F;
+  --color-blue-900: #163F6B;
+
+  --color-indigo-50: #EEF6FE;
+  --color-indigo-100: #D9EBFC;
+  --color-indigo-200: #B6D8FA;
+  --color-indigo-500: #2A8AE9;
+  --color-indigo-600: #1D7FE6;
+  --color-indigo-700: #1766BA;
 }
 
 html {
@@ -11,4 +36,17 @@ html {
 
 body {
   @apply bg-slate-50 font-sans text-slate-900 antialiased;
+}
+
+/* Tailwind v4 leaves buttons with the default cursor; give every clickable control a pointer.
+   In the base layer so utilities like cursor-default and disabled:cursor-not-allowed still win. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
 }

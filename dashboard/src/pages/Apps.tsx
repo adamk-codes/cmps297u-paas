@@ -108,7 +108,7 @@ function Stats({ apps, backups }: { apps: App[]; backups: Backup[] }) {
             <p className="text-2xl font-semibold text-slate-900">{timeAgo(latest.createdAt)}</p>
             <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-slate-600">
               {latest.verifiedAt ? (
-                <span className="flex items-center gap-1.5 text-emerald-700">
+                <span className="flex items-center gap-1.5 text-recover-dark">
                   <BadgeCheck className="size-4" /> Backup verified
                 </span>
               ) : (
@@ -276,7 +276,7 @@ export function Apps() {
             <p className="text-sm text-slate-600">Daily scheduled backups are enabled for apps with PostgreSQL.</p>
           </div>
         </div>
-        <span className="rounded-md bg-white px-3 py-1.5 font-mono text-xs text-slate-600">App Platform</span>
+        <span className="rounded-md bg-white px-3 py-1.5 font-mono text-xs text-slate-600">Rebound</span>
       </div>
 
       {deployOpen && (

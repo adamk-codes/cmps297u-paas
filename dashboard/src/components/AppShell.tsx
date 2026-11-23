@@ -1,22 +1,54 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ChevronDown, Grip, History, LogOut, Menu, SlidersHorizontal, UserRound, X } from 'lucide-react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Activity, ChevronDown, Grip, History, LogOut, Menu, SlidersHorizontal, UserRound, Wallet, X } from 'lucide-react'
+import { api } from '../api'
+import { useAsync } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { cx, Logo } from './ui'
 
 const nav = [
   { to: '/apps', label: 'Apps', icon: Grip },
   { to: '/backups', label: 'Backups', icon: History },
+  { to: '/activity', label: 'Activity', icon: Activity },
+  { to: '/costs', label: 'Costs', icon: Wallet },
   { to: '/settings', label: 'Settings', icon: SlidersHorizontal },
 ]
 
+function ClusterStatus() {
+  const apps = useAsync(() => api.listApps())
+  // Refresh the count on navigation so new deploys show up.
+  const { pathname } = useLocation()
+  const { reload } = apps
+  useEffect(() => void reload(), [pathname, reload])
+  const count = apps.data?.length
+
+  return (
+    <div className="m-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="flex items-center gap-2 font-mono text-xs text-slate-600">
+        <span className="size-2 rounded-full bg-emerald-600" />
+        us-west-2
+      </p>
+      <p className="mt-1.5 text-sm font-medium text-slate-900">Cluster online</p>
+      <p className="text-xs text-slate-500">
+        {count === undefined ? '…' : `${count} ${count === 1 ? 'app' : 'apps'}`}
+      </p>
+    </div>
+  )
+}
+
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <>
+    <div className="flex h-full flex-col">
       <div className="flex h-16 items-center px-4">
-        <Logo />
+        <Link
+          to="/apps"
+          aria-label="Rebound home"
+          onClick={onNavigate}
+          className="rounded-md transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
+          <Logo />
+        </Link>
       </div>
-      <p className="mt-4 px-6 text-xs font-medium tracking-wider text-slate-500 uppercase">Platform</p>
       <nav className="mt-2 space-y-1 px-3">
         {nav.map(({ to, label, icon: Icon }) => (
           <NavLink
@@ -35,7 +67,10 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
         ))}
       </nav>
-    </>
+      <div className="mt-auto">
+        <ClusterStatus />
+      </div>
+    </div>
   )
 }
 

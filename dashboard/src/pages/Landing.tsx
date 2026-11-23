@@ -110,7 +110,7 @@ export function Landing() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="font-mono text-xs text-slate-600">us-east-1</span>
-                      <span className="inline-flex items-center gap-2 rounded-md bg-indigo-100 px-3 py-2 text-xs font-medium text-blue-700">
+                      <span className="inline-flex items-center gap-2 rounded-md bg-recover-soft px-3 py-2 text-xs font-medium text-recover-dark">
                         <BadgeCheck className="size-4" /> Backup verified 02:00 AM UTC
                       </span>
                     </div>
@@ -128,7 +128,7 @@ export function Landing() {
           <Feature icon={<Database className="size-5" />} iconCls="bg-indigo-100 text-blue-700" title="A database for every app">
             One PostgreSQL database per app, with daily scheduled backups.
           </Feature>
-          <Feature icon={<ShieldCheck className="size-5" />} iconCls="bg-emerald-300 text-emerald-900" title="Verified backups and restores">
+          <Feature icon={<ShieldCheck className="size-5" />} iconCls="bg-recover-soft text-recover-dark" title="Verified backups and restores">
             Test a backup against its saved app image at a separate recovery URL.
           </Feature>
         </section>

@@ -36,7 +36,7 @@ export function BackupButton({
 
   return (
     <Button variant="secondary" size="lg" onClick={start} disabled={busy || disabled}>
-      {busy ? <Spinner /> : <DatabaseBackup className="size-5" />}
+      {busy ? <Spinner /> : <DatabaseBackup className="size-5 text-recover-dark" />}
       {busy ? (step ? `${step.label}…` : 'Starting…') : 'Back up now'}
     </Button>
   )

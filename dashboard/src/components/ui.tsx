@@ -1,22 +1,18 @@
 import { useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
-import { Box, Check, Copy, LoaderCircle, NotepadText, Server, SquareTerminal } from 'lucide-react'
+import { Box, Check, Copy, LoaderCircle, NotepadText, SquareTerminal } from 'lucide-react'
 import type { AppIcon, AppStatus, Health } from '../api'
 
 export function cx(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(' ')
 }
 
-export function Logo({ size = 'md' }: { size?: 'md' | 'lg' }) {
-  const box = size === 'lg' ? 'size-12 rounded-lg' : 'size-9 rounded-lg'
+export function Logo({ size = 'md', variant = 'light' }: { size?: 'md' | 'lg'; variant?: 'light' | 'dark' }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className={cx('grid place-items-center bg-blue-600 text-white shadow-sm', box)}>
-        <Server className={size === 'lg' ? 'size-6' : 'size-5'} strokeWidth={1.75} />
-      </div>
-      <span className={cx('font-semibold tracking-tight text-slate-900', size === 'lg' ? 'text-xl' : 'text-[17px]')}>
-        App Platform
-      </span>
-    </div>
+    <img
+      src={`/brand/rebound-logo-${variant}.svg`}
+      alt="Rebound"
+      className={cx('w-auto', size === 'lg' ? 'h-20' : 'h-14')}
+    />
   )
 }
 
@@ -24,12 +20,13 @@ export function Card({ className, children }: { className?: string; children: Re
   return <div className={cx('rounded-xl border border-slate-200 bg-white', className)}>{children}</div>
 }
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'recover'
 const buttonStyles: Record<ButtonVariant, string> = {
   primary: 'bg-blue-600 text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-300',
   secondary: 'border border-slate-300 bg-white text-slate-800 shadow-xs hover:bg-slate-50 disabled:text-slate-400',
   ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
   danger: 'bg-red-600 text-white hover:bg-red-700',
+  recover: 'bg-recover text-white shadow-sm hover:bg-recover-dark disabled:bg-recover/40',
 }
 
 export function Button({
