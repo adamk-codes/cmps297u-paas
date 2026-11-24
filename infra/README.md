@@ -6,7 +6,7 @@ session**, while backups, images, users and the public URL survive between sessi
 | Stack | What | Lifetime | Cost when idle |
 | --- | --- | --- | --- |
 | [`foundation/`](foundation) | KMS key; backup bucket (versioned, SSE-KMS, 30-day expiry); Terraform state bucket; ECR repos (immutable tags, scan on push); Cognito team pool; dashboard on S3 + CloudFront; GitHub OIDC CI role; budget alerts; CloudTrail | Apply once, keep | ~$2–3/month |
-| [`cluster/`](cluster) | VPC (2 AZs, 1 NAT); EKS 2 × t3.medium with access entries and KMS-encrypted Secrets; AWS Load Balancer Controller + metrics-server (Helm); RDS PostgreSQL 16 (single-AZ, private, managed master secret); IRSA roles for the data jobs and the API | **Each session**, then destroy | $0 after `down.sh` |
+| [`cluster/`](cluster) | VPC (2 AZs, 1 NAT); EKS 1.35 (standard support) on 2 × c7i-flex.large with access entries and KMS-encrypted Secrets; AWS Load Balancer Controller + metrics-server (Helm); RDS PostgreSQL 16 (single-AZ, private, managed master secret); IRSA roles for the data jobs and the API | **Each session**, then destroy | $0 after `down.sh` |
 
 ```
                  https://<id>.cloudfront.net   (foundation: stable URL, HTTPS)
@@ -60,7 +60,7 @@ infra/scripts/down.sh        # ~10-15 min: removes the ALB first, then destroys 
   only list/read backup metadata; CI can push to our ECR repos and deploy into the `apps` namespace only.
 - **Encryption**: S3 (SSE-KMS + TLS-only policy), RDS storage, RDS master secret, Kubernetes Secrets (EKS
   envelope encryption), ECR, CloudTrail logs: all with the one customer-managed key (rotation on).
-- Fargate (proposal) was replaced by 2 managed t3.medium nodes: simpler ALB controller/metrics-server setup and
+- Fargate (proposal) was replaced by 2 managed c7i-flex.large nodes: simpler ALB controller/metrics-server setup and
   no per-pod Fargate overhead for short Jobs. See `docs/decisions.md`.
 
 ## Status

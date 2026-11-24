@@ -4,7 +4,7 @@
 
 | Proposal said | Now | Why / note |
 | --- | --- | --- |
-| EKS **on Fargate** | EKS with a **managed node group, 2 × t3.medium** | Current infra task. Simpler for the ALB controller, metrics-server/HPA and Jobs. Fallback in the proposal was ECS on Fargate. |
+| EKS **on Fargate** | EKS 1.35 with a **managed node group, 2 × c7i-flex.large** | Simpler for the ALB controller, metrics-server/HPA and Jobs. Fallback in the proposal was ECS on Fargate. Nodes were first planned as t3.medium; switched to c7i-flex.large (2 vCPU, 4 GiB, same memory) because our AWS account is on the **Free plan**, which only allows Free-plan-eligible instance types (PR #2). Kubernetes 1.35 on **standard support**, so no extended-support surcharge on the control plane. |
 | One URL per app (host-based) | One shared ALB, **path-based** `/apps/<name>` | Hence every app must honour `BASE_PATH`. |
 | Two sample apps, owned by Adam | `notes-app` owned by Abdulrahman | Who builds the second app (the mock shows `shop-api`) is not assigned yet. |
 | Dashboard hosting unspecified | S3 + CloudFront | Adam's task. |

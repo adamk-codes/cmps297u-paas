@@ -19,7 +19,7 @@ Deeper docs:
 
 | Person | Area | Current task (assigned Nov 2026) |
 | --- | --- | --- |
-| Ahmad Marjeh | Infra | Terraform in `infra/`: VPC, EKS (2 × t3.medium managed nodes, community `terraform-aws-modules/vpc` + `eks`), ECR, RDS Postgres, S3 backup bucket, AWS Load Balancer Controller, metrics-server. Goal: `kubectl get nodes` works for everyone. |
+| Ahmad Marjeh | Infra | Terraform in `infra/`: VPC, EKS (2 × c7i-flex.large managed nodes, Kubernetes 1.35, community `terraform-aws-modules/vpc` + `eks`), ECR, RDS Postgres, S3 backup bucket, AWS Load Balancer Controller, metrics-server. Goal: `kubectl get nodes` works for everyone. |
 | Jason Keyrouz | CI/CD + deploy | GitHub Actions in `.github/workflows/`: test → Docker build → scan → push to ECR → deploy to EKS, each app at `/apps/<name>` on one shared ALB. Then the deploy part of the API, HPA autoscaling, load test. |
 | Abdulrahman Kaddoura | Data + recovery | `sample-apps/notes-app/` (Node + Express + Postgres, 100+ rows, `DATABASE_URL` + `BASE_PATH`, `/healthz`), Dockerfile + docker-compose. Then backup script/Job (pg_dump → S3) and restore script/Job (new DB + recovery URL), plus their API endpoints. |
 | Adam Al Khatib | Dashboard + docs | HTTP client implementing `PlatformApi` against the real API (switchable with the mock), dashboard on S3 + CloudFront. Later: budget field, cost page, poster draft. Owns `docs/` guides. |
@@ -67,7 +67,7 @@ the demo or as measured evidence in the report.
   returns 501**: new apps go through the CI pipeline (Jason).
 - `infra/` (same PR): Terraform in two stacks. `foundation/` (keep): KMS, backup + state buckets, ECR, Cognito,
   dashboard S3 + CloudFront (one HTTPS URL for dashboard, `/api`, `/apps`), GitHub OIDC CI role, budgets,
-  CloudTrail. `cluster/` (each session): VPC, EKS 2 × t3.medium, ALB controller, metrics-server, RDS, IRSA
+  CloudTrail. `cluster/` (each session): VPC, EKS 1.35 on 2 × c7i-flex.large, ALB controller, metrics-server, RDS, IRSA
   roles. `scripts/up.sh` / `down.sh` run a whole session. See `infra/README.md`.
 - `deploy/` (same PR): generic app template (Deployment, Service, Ingress, HPA) + `deploy-app.sh` with
   automatic rollback; used by `up.sh`, the API's redeploy, and (intended) the CI pipeline.
