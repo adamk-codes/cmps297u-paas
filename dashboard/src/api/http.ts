@@ -1,5 +1,15 @@
 import type { PlatformApi } from './index'
-import type { App, ApprovedRepo, Backup, DeployRequest, LogLine, Operation, Restore } from './types'
+import type {
+  App,
+  ApprovedRepo,
+  Backup,
+  BudgetStatus,
+  CostReport,
+  DeployRequest,
+  LogLine,
+  Operation,
+  Restore,
+} from './types'
 
 // PlatformApi over HTTP, against the Rebound API (api/ in this repo). Paths are documented in api/README.md.
 // baseUrl '' means same origin (the dashboard and /api are both served by CloudFront).
@@ -18,7 +28,7 @@ export const UNAUTHORIZED_EVENT = 'rebound:unauthorized'
 export function createHttpApi(baseUrl: string, getToken: () => Promise<string | null>): PlatformApi {
   const root = baseUrl.replace(/\/$/, '')
 
-  async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async function request<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' }
     const token = await getToken()
     if (token) headers.Authorization = `Bearer ${token}`
@@ -61,5 +71,7 @@ export function createHttpApi(baseUrl: string, getToken: () => Promise<string | 
     restore: (backupId) => request<Operation>('POST', `/api/backups/${id(backupId)}/restore`),
     listRestores: () => request<Restore[]>('GET', '/api/restores'),
     getLogs: (appId) => request<LogLine[]>('GET', `/api/apps/${id(appId)}/logs`),
+    getCosts: () => request<CostReport>('GET', '/api/costs'),
+    updateBudget: (limitUsd) => request<BudgetStatus>('PUT', '/api/costs/budget', { limitUsd }),
   }
 }

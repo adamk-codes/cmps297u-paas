@@ -42,6 +42,11 @@ export function loadConfig(env = process.env) {
     // Public URL of a recovery app; {app} is replaced. On EKS the runner reports the real ALB URL.
     recoveryUrlTemplate: env.RECOVERY_URL_TEMPLATE || 'http://localhost:3001/apps/{app}-recovery/',
 
+    // Costs page: Cost Explorer + AWS Budgets (kubernetes mode, needs the account id)
+    accountId: env.AWS_ACCOUNT_ID || undefined,
+    budgetName: env.BUDGET_NAME || 'rebound-monthly',
+    costCacheMinutes: Number.parseInt(env.COST_CACHE_MINUTES || '360', 10),
+
     // Apps (read from Kubernetes in kubernetes mode)
     namespace: env.NAMESPACE || 'apps',
     publicUrl: (env.PUBLIC_URL || env.ALB_URL || 'http://localhost:3000').replace(/\/$/, ''),

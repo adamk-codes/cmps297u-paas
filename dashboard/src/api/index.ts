@@ -1,4 +1,14 @@
-import type { App, ApprovedRepo, Backup, DeployRequest, LogLine, Operation, Restore } from './types'
+import type {
+  App,
+  ApprovedRepo,
+  Backup,
+  BudgetStatus,
+  CostReport,
+  DeployRequest,
+  LogLine,
+  Operation,
+  Restore,
+} from './types'
 import { mockApi } from './mock'
 import { createHttpApi } from './http'
 import { getIdToken } from '../lib/cognito'
@@ -18,6 +28,8 @@ export interface PlatformApi {
   restore(backupId: string): Promise<Operation>
   listRestores(): Promise<Restore[]>
   getLogs(appId: string): Promise<LogLine[]>
+  getCosts(): Promise<CostReport>
+  updateBudget(limitUsd: number): Promise<BudgetStatus>
 }
 
 // VITE_USE_MOCK=true forces the mock, =false forces HTTP. Unset: HTTP when VITE_API_URL is set.

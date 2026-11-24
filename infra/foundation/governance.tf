@@ -8,6 +8,11 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
+  # The limit can be changed from the dashboard (Settings → Monthly budget); don't reset it on apply.
+  lifecycle {
+    ignore_changes = [limit_amount]
+  }
+
   dynamic "notification" {
     for_each = [
       { threshold = 50, type = "ACTUAL" },

@@ -1,5 +1,6 @@
 import { createApp } from './app.js'
 import { createAppsSource } from './apps.js'
+import { createCostService } from './costs.js'
 import { S3Catalog } from './catalog.js'
 import { loadConfig } from './config.js'
 import { createExecutor } from './executor.js'
@@ -17,7 +18,7 @@ const operations = new Operations({
   catalog: new S3Catalog(config.s3),
 })
 if (!config.auth.userPoolId) console.warn('COGNITO_USER_POOL_ID not set: API is open (local dev only)')
-const app = createApp({ operations, apps: createAppsSource(config), config })
+const app = createApp({ operations, apps: createAppsSource(config), costs: createCostService(config), config })
 const server = app.listen(config.port, () => {
   console.log(`rebound-api listening on :${config.port} (executor: ${config.executor}, bucket: ${config.s3.bucket})`)
 })

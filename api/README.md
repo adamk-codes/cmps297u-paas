@@ -6,7 +6,7 @@ routes in `src/app.js` and more operation kinds in `src/operations.js` + `src/st
 
 ```bash
 npm install
-npm test          # 17 tests, no AWS/Docker/DB needed
+npm test          # 29 tests, no AWS/Docker/DB needed
 npm run dev       # in-memory history, no auth, process executor
 ```
 
@@ -21,6 +21,13 @@ npm run dev       # in-memory history, no auth, process executor
 | `getOperation(id)` | `GET /api/operations/:id` | `Operation`; `result` is the `RestoreResult` for restores |
 | (activity) | `GET /api/operations?kind=&appId=&status=` | `Operation[]` |
 | | `GET /api/backups/:backupId` | `Backup` |
+| `listApps()` / `getApp(id)` | `GET /api/apps`, `GET /api/apps/:appId` | `App[]` / `App`, read from Kubernetes |
+| `getLogs(id)` | `GET /api/apps/:appId/logs` | `LogLine[]` (last 200 lines) |
+| `redeploy(id, tag)` | `POST /api/apps/:appId/redeploy {imageTag}` | `202 Operation` (`pull`, `release`); only tags in the app's history |
+| `listApprovedRepos()` | `GET /api/repos` | `APPROVED_REPOS` |
+| `deploy(req)` | `POST /api/apps` | `501`: new apps go through the CI pipeline |
+| `getCosts()` | `GET /api/costs` | `CostReport`: Cost Explorer spend (before credits) by day and service, forecast, AWS Budget, session rate; cached 6 h |
+| `updateBudget(limit)` | `PUT /api/costs/budget {limitUsd}` | `BudgetStatus`; updates the `rebound-monthly` AWS Budget |
 | | `GET /healthz`, `GET /api/healthz` | no auth |
 
 - **Auth:** with `COGNITO_USER_POOL_ID` set, every `/api` call needs `Authorization: Bearer <Cognito id or

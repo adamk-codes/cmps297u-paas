@@ -4,6 +4,8 @@ import type {
   App,
   ApprovedRepo,
   Backup,
+  BudgetStatus,
+  CostReport,
   DeployRequest,
   LogLine,
   Operation,
@@ -336,7 +338,7 @@ export const mockApi: PlatformApi = {
     const app = findApp(appId)
     const lines: [number, LogLine['level'], string][] = [
       [180, 'info', `Pulled image ${app.image.tag} (${app.image.digest.slice(0, 19)})`],
-      [178, 'info', 'Container started on Fargate'],
+      [178, 'info', 'Pod started on EKS (t3.medium node)'],
       [177, 'info', app.database ? `Connected to PostgreSQL ${app.database.version} database "${app.database.name}"` : 'No database configured'],
       [176, 'info', 'Listening on port 3000'],
       [120, 'info', 'GET /health 200 3ms'],
@@ -350,4 +352,68 @@ export const mockApi: PlatformApi = {
       message,
     }))
   },
+
+  async getCosts() {
+    await delay()
+    return mockCosts()
+  },
+
+  async updateBudget(limitUsd) {
+    await delay(400)
+    if (!Number.isFinite(limitUsd) || limitUsd < 1 || limitUsd > 10_000) throw new Error('budget must be between $1 and $10,000')
+    budget.limit = Math.round(limitUsd * 100) / 100
+    return clone(budget)
+  },
+}
+
+// ---- costs: a month of work sessions (~$0.30/h while the cluster is up) on top of ~$0.10/day ----
+
+const SESSION_RATE = [
+  { item: 'EKS control plane', perHour: 0.1 },
+  { item: 'EC2 nodes (2 × t3.medium)', perHour: 0.0832 },
+  { item: 'NAT gateway', perHour: 0.045 },
+  { item: 'Application Load Balancer', perHour: 0.0305 },
+  { item: 'RDS db.t4g.micro', perHour: 0.016 },
+  { item: 'Public IPv4 (3)', perHour: 0.015 },
+  { item: 'EBS storage', perHour: 0.007 },
+]
+const SERVICE_SHARE: [string, number][] = [
+  ['Amazon Elastic Kubernetes Service', 0.34],
+  ['Amazon Elastic Compute Cloud - Compute', 0.28],
+  ['Amazon Virtual Private Cloud', 0.2],
+  ['Elastic Load Balancing', 0.1],
+  ['Amazon Relational Database Service', 0.06],
+  ['AWS Key Management Service', 0.01],
+  ['Amazon Simple Storage Service', 0.01],
+]
+const budget: BudgetStatus = { name: 'rebound-monthly', limit: 40, actual: 0, alertThresholds: [50, 80, 100] }
+
+function mockCosts(): CostReport {
+  const now = new Date()
+  const days = now.getUTCDate()
+  const perHour = SESSION_RATE.reduce((s, i) => s + i.perHour, 0)
+  const round = (n: number) => Math.round(n * 100) / 100
+  // Deterministic "session hours" per day: about one day in two has a 3-7 hour session.
+  const daily = Array.from({ length: days }, (_, i) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), i + 1))
+    const hours = i % 2 === 1 || i % 7 === 3 ? 2 + ((i * 7) % 5) : 0
+    return { date: d.toISOString().slice(0, 10), amount: round(0.1 + hours * perHour) }
+  })
+  const monthToDate = round(daily.reduce((s, d) => s + d.amount, 0))
+  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate()
+  const forecastMonth = round((monthToDate / days) * daysInMonth)
+  budget.actual = monthToDate
+  budget.forecast = forecastMonth
+  return {
+    currency: 'USD',
+    generatedAt: now.toISOString(),
+    source: 'mock',
+    monthToDate,
+    forecastMonth,
+    byService: SERVICE_SHARE.map(([service, share]) => ({ service, amount: round(monthToDate * share) })),
+    daily,
+    budget: clone(budget),
+    sessionRate: { perHour: Math.round(perHour * 1000) / 1000, items: SESSION_RATE },
+    note: 'Mock data. On AWS this page shows Cost Explorer usage before credits.',
+  }
 }

@@ -1,5 +1,5 @@
 # Rebound API on EKS. Render with envsubst (same variables as jobs/backup-restore/k8s/.env, plus
-# API_IMAGE, API_ROLE_ARN, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, DASHBOARD_ORIGIN):
+# API_IMAGE, API_ROLE_ARN, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, DASHBOARD_ORIGIN, AWS_ACCOUNT_ID):
 #   set -a; source jobs/backup-restore/k8s/.env; set +a
 #   envsubst < api/k8s/api.yaml | kubectl apply -f -
 # The platform database URL comes from Secret rebound-platform-db, created by
@@ -105,6 +105,8 @@ spec:
             - { name: COGNITO_USER_POOL_ID, value: "${COGNITO_USER_POOL_ID}" }
             - { name: COGNITO_CLIENT_ID, value: "${COGNITO_CLIENT_ID}" }
             - { name: PUBLIC_URL, value: "${DASHBOARD_ORIGIN}" }
+            - { name: AWS_ACCOUNT_ID, value: "${AWS_ACCOUNT_ID}" }
+            - { name: BUDGET_NAME, value: rebound-monthly }
             - name: APPROVED_REPOS
               value: '[{"fullName":"github.com/adamk-codes/cmps297u-paas","defaultBranch":"main","runtime":"Node.js 20"}]'
             - { name: CORS_ORIGINS, value: "${DASHBOARD_ORIGIN}" }

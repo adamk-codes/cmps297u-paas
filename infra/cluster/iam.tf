@@ -95,6 +95,16 @@ data "aws_iam_policy_document" "api" {
     actions   = ["s3:GetObject"]
     resources = ["${local.bucket_arn}/backups/*"]
   }
+  statement {
+    sid       = "CostsPage" # Cost Explorer has no resource-level permissions
+    actions   = ["ce:GetCostAndUsage", "ce:GetCostForecast"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "BudgetField"
+    actions   = ["budgets:ViewBudget", "budgets:ModifyBudget"]
+    resources = ["arn:aws:budgets::${local.account_id}:budget/${var.name}-monthly"]
+  }
 }
 
 resource "aws_iam_role_policy" "api" {

@@ -13,7 +13,9 @@ import { HttpError } from './operations.js'
 //   redeploy(appId, tag)  POST /api/apps/:appId/redeploy {imageTag} -> 202 Operation
 //   listApprovedRepos()   GET  /api/repos
 //   deploy(req)           POST /api/apps -> 501 (new apps go through the CI pipeline)
-export function createApp({ operations, apps, config, verifier }) {
+//   getCosts()            GET  /api/costs                         (Cost Explorer + Budgets, cached)
+//   updateBudget(limit)   PUT  /api/costs/budget {limitUsd}
+export function createApp({ operations, apps, costs, config, verifier }) {
   const app = express()
   app.disable('x-powered-by')
   app.set('trust proxy', true)
@@ -25,7 +27,7 @@ export function createApp({ operations, apps, config, verifier }) {
       res.set('Access-Control-Allow-Origin', origin)
       res.set('Vary', 'Origin')
       res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key')
-      res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
     }
     if (req.method === 'OPTIONS') return res.status(204).end()
     next()
@@ -80,6 +82,17 @@ export function createApp({ operations, apps, config, verifier }) {
 
   app.get('/api/repos', (_req, res) => res.json(config.approvedRepos))
 
+  // ---- costs and budget ----
+  app.get('/api/costs', wrap(async (req, res) => {
+    if (!costs) throw new HttpError(501, 'cost reporting is not configured')
+    res.json(await costs.report({ refresh: req.query.refresh === '1' }))
+  }))
+
+  app.put('/api/costs/budget', wrap(async (req, res) => {
+    if (!costs) throw new HttpError(501, 'cost reporting is not configured')
+    res.json(await costs.updateBudget(req.body?.limitUsd))
+  }))
+
   // New apps are built by the CI pipeline (test -> build -> scan -> push), not by the API.
   app.post('/api/apps', (_req, res) => {
     res.status(501).json({ error: 'New deployments run through the GitHub Actions pipeline; push to main to deploy.' })
@@ -122,12 +135,15 @@ export function createApp({ operations, apps, config, verifier }) {
 
   app.use((_req, res) => res.status(404).json({ error: 'not found' }))
   // eslint-disable-next-line no-unused-vars
-  app.use((err, _req, res, _next) => {
+  app.use((err, req, res, _next) => {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, ...err.extra })
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'invalid JSON body' })
     if (err.$metadata || ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT'].includes(err.code)) {
-      console.error('backup storage error:', err.name, err.message)
-      return res.status(502).json({ error: 'backup storage (S3) is unavailable' })
+      // An AWS dependency failed (S3 for backups; Cost Explorer / Budgets for costs).
+      const service = req.path.startsWith('/api/costs') ? 'AWS Cost Explorer / Budgets' : 'backup storage (S3)'
+      console.error(`${service} error:`, err.name, err.message)
+      const denied = err.name === 'AccessDeniedException' || err.$metadata?.httpStatusCode === 403
+      return res.status(502).json({ error: `${service} ${denied ? 'denied the request' : 'is unavailable'}` })
     }
     console.error(err)
     res.status(500).json({ error: 'internal error' })
