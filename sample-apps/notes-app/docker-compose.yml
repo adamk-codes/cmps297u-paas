@@ -1,0 +1,119 @@
+# Local stack for notes-app and the backup/restore jobs. No AWS needed.
+#
+#   docker compose up --build -d                    app + Postgres + local S3 stand-in
+#   open http://localhost:3000/apps/notes-app/
+#   docker compose run --rm backup                  pg_dump -> s3://rebound-backups/backups/notes-app/...
+#   docker compose run --rm -e BACKUP_KEY=<key> restore     new DB + pg_restore + row-count check
+#   RECOVERY_DB=<db> docker compose --profile recovery up -d notes-app-recovery   (port 3001)
+#
+# Or run the whole drill: ../../jobs/backup-restore/demo-local.sh
+
+name: notes-app
+
+x-db-url: &db-url postgres://notes_app:notes_app_local@postgres:5432/notes_app
+x-s3-env: &s3-env
+  S3_BUCKET: rebound-backups
+  S3_ENDPOINT: http://s3:9090
+  S3_SSE: ""                   # the local S3 stand-in has no KMS; real S3 uses aws:kms (the default)
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
+  AWS_DEFAULT_REGION: us-east-1
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: notes_app
+      POSTGRES_PASSWORD: notes_app_local
+      POSTGRES_DB: notes_app
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes_app -d notes_app"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  notes-app:
+    build:
+      context: .
+      args:
+        IMAGE_TAG: ${IMAGE_TAG:-local}
+    image: notes-app:${IMAGE_TAG:-local}
+    environment:
+      DATABASE_URL: *db-url
+      BASE_PATH: /apps/notes-app
+      APP_NAME: notes-app
+      ALLOW_DATA_LOSS_DEMO: "true"
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Same image pointed at a restored database, like /apps/notes-app-recovery on the cluster.
+  notes-app-recovery:
+    profiles: [recovery]
+    image: notes-app:${IMAGE_TAG:-local}
+    environment:
+      DATABASE_URL: postgres://notes_app:notes_app_local@postgres:5432/${RECOVERY_DB:-notes_app}
+      BASE_PATH: /apps/notes-app-recovery
+      APP_NAME: notes-app
+      SEED_COUNT: "0"
+    ports: ["3001:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Local S3 stand-in (MinIO no longer publishes public images). Data lives only in the container.
+  s3:
+    image: adobe/s3mock:latest
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: rebound-backups
+      initialBuckets: rebound-backups
+    ports: ["9090:9090"]
+
+  # One-shot: waits for the S3 stand-in and makes sure the backup bucket exists.
+  s3-init:
+    image: rebound/backup-restore:local
+    build: ../../jobs/backup-restore
+    entrypoint:
+      - bash
+      - -c
+      - |
+        for i in $$(seq 1 30); do
+          aws --endpoint-url $$S3_ENDPOINT s3 ls >/dev/null 2>&1 && break; sleep 1
+        done
+        aws --endpoint-url $$S3_ENDPOINT s3 ls s3://$$S3_BUCKET >/dev/null 2>&1 \
+          || aws --endpoint-url $$S3_ENDPOINT s3 mb s3://$$S3_BUCKET
+    environment: *s3-env
+    depends_on: [s3]
+
+  backup:
+    profiles: [tools]
+    image: rebound/backup-restore:local
+    build: ../../jobs/backup-restore
+    command: ["backup"]
+    environment:
+      <<: *s3-env
+      DATABASE_URL: *db-url
+      APP_NAME: notes-app
+      IMAGE_TAG: ${IMAGE_TAG:-local}
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3-init: { condition: service_completed_successfully }
+
+  restore:
+    profiles: [tools]
+    image: rebound/backup-restore:local
+    build: ../../jobs/backup-restore
+    command: ["restore"]
+    environment:
+      <<: *s3-env
+      # Restores need a login that may CREATE DATABASE (the RDS master user on AWS).
+      ADMIN_DATABASE_URL: *db-url
+      BACKUP_KEY: ${BACKUP_KEY:-}
+      TARGET_OWNER: notes_app
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3-init: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:
