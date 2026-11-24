@@ -1,0 +1,38 @@
+# Create the app's database + restricted login on the shared RDS instance and store its URL in
+# Secrets Manager (rebound/apps/<app>/db). rebound-data.sh then copies it into the <app>-db Secret.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${NAMESPACE}
+  labels: &labels
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: provision
+    rebound.io/app: ${APP_NAME}
+    rebound.io/operation-id: ${OPERATION_ID}
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: rebound-data-jobs
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 70, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: provision
+          image: ${JOBS_IMAGE}
+          args: ["provision"]
+          env:
+            - { name: APP_NAME, value: "${APP_NAME}" }
+            - { name: SECRET_ID, value: "rebound/apps/${APP_NAME}/db" }
+            - { name: SECRETS_KMS_KEY_ID, value: "${SECRETS_KMS_KEY_ID}" }
+            - { name: AWS_REGION, value: "${AWS_REGION}" }
+            - name: ADMIN_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: rebound-db-admin, key: ADMIN_DATABASE_URL } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

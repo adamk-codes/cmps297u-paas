@@ -20,22 +20,38 @@ npm run build      # type-check and build to dist/
 | `/backups` | Backup history, manual backups, restores into a new database with a recovery URL |
 | `/settings` | Account, approved repositories, platform defaults |
 
-## Mock mode (current)
+## Backend: mock or real
 
-The backend isn't deployed yet, so everything runs against an in-memory mock
-([`src/api/mock.ts`](src/api/mock.ts)). Deploys, backups, and restores advance step by step on a
-timer, the way the real Kubernetes Jobs will. State resets when the page reloads.
+`src/api/index.ts` picks the implementation of `PlatformApi` (all calls the dashboard makes; data shapes in
+`src/api/types.ts`):
 
-- **Sign in:** any email plus a password of 8+ characters.
-- **Failed release demo:** deploy `failing-tests-demo`; the Test step fails and blocks the release.
+| Setting (`.env.local`) | Uses |
+| --- | --- |
+| nothing set | **Mock** (`src/api/mock.ts`): in-memory, deploys/backups/restores advance on a timer |
+| `VITE_API_URL=http://localhost:8080` | **Real API** (`src/api/http.ts`) running locally (`docker compose --profile api up` in `sample-apps/notes-app`) |
+| `VITE_API_URL=` + `VITE_USE_MOCK=false` | **Real API on the same origin**, i.e. the deployed dashboard behind CloudFront (`infra/scripts/up.sh` builds it this way) |
 
-## Connecting the real backend
+The HTTP client sends the Cognito ID token, adds an `Idempotency-Key` to every POST, turns API errors into
+readable messages ("The platform API is not running…" between sessions), and signs the user out on 401.
+The sidebar shows whether the cluster is online and when mock data is in use.
 
-- **API:** [`src/api/index.ts`](src/api/index.ts) defines `PlatformApi`, the full list of calls the
-  dashboard makes, and [`src/api/types.ts`](src/api/types.ts) defines the data shapes. Long-running
-  work returns an `Operation` that the dashboard polls with `getOperation(id)`. Add an HTTP client
-  that implements `PlatformApi` against `VITE_API_URL` and export it from `index.ts`.
-- **Sign-in:** [`src/lib/auth.tsx`](src/lib/auth.tsx) is the only file that changes. Replace the
-  mock `signIn`/`signOut` with Amplify Auth using the Cognito user pool from Terraform.
+Mock-only demos: deploy `failing-tests-demo` and the Test step fails and blocks the release. With the real API,
+new deployments go through the GitHub Actions pipeline; redeploying an image from an app's history works.
 
-Copy `.env.example` to `.env.local` and fill in the values once they exist.
+## Sign-in
+
+`src/lib/auth.tsx` uses Cognito when `VITE_COGNITO_CLIENT_ID` is set (`src/lib/cognito.ts`, no Amplify: one
+HTTPS call to Cognito, tokens in `sessionStorage`, refreshed before expiry). Team members are created by
+Terraform (`infra/foundation`, `team_emails`); Cognito emails a temporary password and the sign-in page asks
+for a new one on first sign-in. Without Cognito settings, sign-in is mocked (any email + 8-character password).
+
+## Hosting
+
+Static build on a private S3 bucket behind CloudFront (`infra/foundation/edge.tf`), same HTTPS origin as
+`/api/*` and `/apps/*`. `infra/scripts/up.sh` builds and publishes it; by hand:
+
+```bash
+VITE_USE_MOCK=false VITE_COGNITO_CLIENT_ID=... VITE_COGNITO_USER_POOL_ID=... npm run build
+aws s3 sync dist s3://<dashboard bucket> --delete
+aws cloudfront create-invalidation --distribution-id <id> --paths '/*'
+```

@@ -1,8 +1,21 @@
-import type { App, ApprovedRepo, Backup, DeployRequest, LogLine, Operation, Restore } from './types'
+import type {
+  App,
+  ApprovedRepo,
+  Backup,
+  BudgetStatus,
+  CostReport,
+  DeployRequest,
+  LogLine,
+  Operation,
+  Restore,
+} from './types'
 import { mockApi } from './mock'
+import { createHttpApi } from './http'
+import { getIdToken } from '../lib/cognito'
 
-// Everything the dashboard needs from the platform API. The mock implements it today; an HTTP
-// client calling VITE_API_URL will implement the same interface once the API is deployed.
+// Everything the dashboard needs from the platform API. Two implementations:
+//   mockApi        in-memory, for UI work without a backend
+//   createHttpApi  the real API (api/ in this repo), at VITE_API_URL ('' = same origin)
 export interface PlatformApi {
   listApps(): Promise<App[]>
   getApp(id: string): Promise<App>
@@ -15,8 +28,15 @@ export interface PlatformApi {
   restore(backupId: string): Promise<Operation>
   listRestores(): Promise<Restore[]>
   getLogs(appId: string): Promise<LogLine[]>
+  getCosts(): Promise<CostReport>
+  updateBudget(limitUsd: number): Promise<BudgetStatus>
 }
 
-export const api: PlatformApi = mockApi
+// VITE_USE_MOCK=true forces the mock, =false forces HTTP. Unset: HTTP when VITE_API_URL is set.
+const env = import.meta.env
+export const usingMock: boolean =
+  env.VITE_USE_MOCK === 'true' || (env.VITE_USE_MOCK !== 'false' && !env.VITE_API_URL)
+
+export const api: PlatformApi = usingMock ? mockApi : createHttpApi(env.VITE_API_URL ?? '', getIdToken)
 
 export * from './types'

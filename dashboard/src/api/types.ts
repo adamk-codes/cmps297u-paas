@@ -110,3 +110,37 @@ export interface DeployRequest {
   name: string
   createDatabase: boolean
 }
+
+// ---- costs (GET /api/costs) ----
+
+export interface CostLine {
+  service: string // AWS service name as Cost Explorer reports it
+  amount: number // USD, month to date
+}
+
+export interface DailyCost {
+  date: string // YYYY-MM-DD (UTC)
+  amount: number
+}
+
+export interface BudgetStatus {
+  name: string
+  limit: number // USD per month
+  actual: number
+  forecast?: number
+  alertThresholds: number[] // percent of the limit that triggers an email
+}
+
+export interface CostReport {
+  currency: 'USD'
+  generatedAt: string
+  // cost-explorer: real spend; estimate: no AWS access (local API); mock: dashboard mock
+  source: 'cost-explorer' | 'estimate' | 'mock'
+  monthToDate?: number // usage before credits
+  forecastMonth?: number
+  byService: CostLine[]
+  daily: DailyCost[]
+  budget?: BudgetStatus
+  sessionRate: { perHour: number; items: { item: string; perHour: number }[] }
+  note?: string
+}

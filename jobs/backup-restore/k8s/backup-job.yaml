@@ -1,0 +1,39 @@
+# One manual backup: pg_dump -> s3://$S3_BUCKET/backups/<app>/<timestamp>-<imageTag>.dump (SSE-KMS).
+# Rendered and started by rebound-data.sh backup <app>.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${NAMESPACE}
+  labels: &labels
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: backup
+    rebound.io/app: ${APP_NAME}
+    rebound.io/operation-id: ${OPERATION_ID}
+spec:
+  backoffLimit: 1                  # limited retries: one more attempt, then the operation fails
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: rebound-data-jobs
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 70, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: backup
+          image: ${JOBS_IMAGE}
+          args: ["backup"]
+          env:
+            - { name: APP_NAME, value: "${APP_NAME}" }
+            - { name: IMAGE_TAG, value: "${IMAGE_TAG}" }
+            - { name: S3_BUCKET, value: "${S3_BUCKET}" }
+            - { name: S3_KMS_KEY_ID, value: "${S3_KMS_KEY_ID}" }
+            - { name: AWS_REGION, value: "${AWS_REGION}" }
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: "${APP_NAME}-db", key: DATABASE_URL } }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

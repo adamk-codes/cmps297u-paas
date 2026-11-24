@@ -1,0 +1,40 @@
+# Restore a backup into a NEW database and verify the row count. Never retried automatically:
+# a retry would create a second database; the operator (or API) decides instead.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${NAMESPACE}
+  labels: &labels
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: restore
+    rebound.io/app: ${APP_NAME}
+    rebound.io/operation-id: ${OPERATION_ID}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1200
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: rebound-data-jobs
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 70, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: restore
+          image: ${JOBS_IMAGE}
+          args: ["restore"]
+          env:
+            - { name: BACKUP_KEY, value: "${BACKUP_KEY}" }
+            - { name: TARGET_DB, value: "${TARGET_DB}" }
+            - { name: TARGET_OWNER, value: "${DB_NAME}" }
+            - { name: S3_BUCKET, value: "${S3_BUCKET}" }
+            - { name: AWS_REGION, value: "${AWS_REGION}" }
+            - { name: MIN_ROWS, value: "${MIN_ROWS}" }
+            - name: ADMIN_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: rebound-db-admin, key: ADMIN_DATABASE_URL } }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

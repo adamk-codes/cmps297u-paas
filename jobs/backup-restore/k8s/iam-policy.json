@@ -1,0 +1,35 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BackupObjects",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::BACKUP_BUCKET/backups/*"
+    },
+    {
+      "Sid": "ListBackups",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::BACKUP_BUCKET",
+      "Condition": { "StringLike": { "s3:prefix": ["backups/*"] } }
+    },
+    {
+      "Sid": "BackupEncryption",
+      "Effect": "Allow",
+      "Action": ["kms:GenerateDataKey", "kms:Decrypt", "kms:Encrypt"],
+      "Resource": "BACKUP_KMS_KEY_ARN"
+    },
+    {
+      "Sid": "AppDatabaseSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:*:*:secret:rebound/apps/*"
+    }
+  ]
+}
