@@ -63,8 +63,9 @@ infra/scripts/down.sh        # ~10-15 min: removes the ALB first, then destroys 
 - Fargate (proposal) was replaced by 2 managed t3.medium nodes: simpler ALB controller/metrics-server setup and
   no per-pod Fargate overhead for short Jobs. See `docs/decisions.md`.
 
-## Not yet verified
+## Status
 
-`terraform fmt` passes; `terraform init/validate` (downloads providers and the community modules) and a real
-apply have not been run yet. Module major versions pinned: `terraform-aws-modules/vpc ~> 6`, `eks ~> 21`,
-`iam ~> 6`, AWS provider `~> 6`, Helm provider `~> 3`.
+`terraform fmt`, `init` and `validate` pass for both stacks (resolved: `terraform-aws-modules/vpc` 6.8,
+`eks` 21.30, `iam` 6.11, AWS provider 6.74, Helm provider 3.3; see the committed `.terraform.lock.hcl`).
+**`plan`/`apply` have not been run yet**: that needs AWS credentials and costs money, so only on purpose.
+The Terraform registry may need a VPN from some networks.

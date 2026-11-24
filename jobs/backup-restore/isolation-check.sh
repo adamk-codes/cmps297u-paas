@@ -24,7 +24,8 @@ if out="$(psql "$other_url" -v ON_ERROR_STOP=1 -tAc 'SELECT current_database()' 
   log "FAIL: $detail"
 else
   status=succeeded
-  detail="$(printf '%s' "$out" | grep -oE 'permission denied[^"]*|does not exist|no pg_hba.conf entry[^"]*' | head -1)"
+  # e.g. FATAL:  permission denied for database "shop_api"  ->  permission denied for database shop_api
+  detail="$(printf '%s' "$out" | grep -oE 'permission denied for database "?[a-z0-9_]+"?|database "?[a-z0-9_]+"? does not exist|no pg_hba.conf entry[^,]*' | head -1 | tr -d '"')"
   log "OK: $user was refused by $OTHER_DATABASE (${detail:-refused})"
 fi
 

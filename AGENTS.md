@@ -77,9 +77,15 @@ the demo or as measured evidence in the report.
 
 Not yet pushed by anyone: `.github/workflows/` (Jason's pipeline).
 
-Not yet verified: no Terraform `init/validate/apply` yet (needs provider/module downloads, then AWS). The EKS
-path (`rebound-data.sh`, `api/k8s/api.yaml`, `deploy/app.yaml`) is checked offline only (rendered, parsed,
-helpers unit-checked). Docker images, the API's `PgStore`, and the latest `demo-local.sh` haven't run yet.
+Verified locally (2026-11-24): both Terraform stacks pass `init` + `validate` (vpc 6.8, eks 21.30, iam 6.11, AWS
+provider 6.74, Helm 3.3; lock files committed). `demo-local.sh --fresh` passes end to end (provision, isolation
+refused, 120-row backup, 96 deleted, restore into a new DB, 120 served by the recovery app, 14 s total). The API
+Docker image runs the real scripts: backup and restore over HTTP, 409 on a concurrent restore, backup marked
+verified, and the dashboard shows it all against the real API.
+
+Not yet verified: no `terraform plan/apply` (needs AWS credentials and the go-ahead). Everything on EKS
+(`rebound-data.sh`, `api/k8s/api.yaml`, `deploy/app.yaml`) is checked offline only. The API's `PgStore` hasn't run
+against Postgres (local runs use the in-memory store).
 
 ## How it gets deployed (the short version)
 

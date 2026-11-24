@@ -59,7 +59,8 @@ at a time) to protect the shared database.
 **Evidence:** load test with **[TODO: tool, e.g. `hey`/k6, rate, duration]**: pods went from 1 to **[TODO]** in
 **[TODO] s**; p95 latency **[TODO] ms** before vs **[TODO] ms** at peak (screenshot of `kubectl get hpa -w`).
 Recovery: restoring **120 rows ([TODO] KB dump)** took **[TODO] s** for the restore Job and **[TODO] s** end to
-end until the recovery URL was verified (`RECOVERY_RESULT`). Locally the same restore took 2 s.
+end until the recovery URL was verified (`RECOVERY_RESULT`). Locally (docker-compose) the restore Job took 2 s
+and 14 s end to end including starting the recovery app (5.2 KB dump, 120/120 rows).
 
 **Limit:** the shared db.t4g.micro is the bottleneck: ~80 connections (each app pod opens up to 5) and burstable
 CPU. At ~**[TODO]** pods across apps, connections run out; next steps would be PgBouncer or a larger instance.
