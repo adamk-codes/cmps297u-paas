@@ -11,13 +11,14 @@ deployment, gets an application URL, and can back up and restore its data — al
 | Folder | What lives there | Owner |
 | --- | --- | --- |
 | `dashboard/` | React dashboard (Cognito sign-in, apps, deploys, backups) | Adam |
-| `sample-apps/` | The two sample Node.js apps and the Docker template | Adam |
+| `sample-apps/` | Sample Node.js apps (`notes-app/`: Express + Postgres, Dockerfile, docker-compose) | Abdulrahman (notes-app) / Adam |
+| `jobs/` | Backup and restore job image (`jobs/backup-restore/`: pg_dump to S3, restore into a new DB + verify) | Abdulrahman |
 | `api/` | Platform API: deployments, databases, backups, restores | Jason / Abdulrahman |
-| `infra/` | Terraform: network, EKS on Fargate, load balancer, RDS, IAM, Cognito | Ahmad |
+| `infra/` | Terraform: network, EKS (managed nodes), ECR, load balancer, RDS, S3, IAM, Cognito | Ahmad |
 | `.github/workflows/` | CI/CD: test, build, scan, push to ECR, release | Jason |
 | `docs/` | Deployment and recovery guide, test results, cost report | Adam |
 
-Folders are added as each part of the project starts.
+Folders are added as each part of the project starts. Context for contributors and coding agents: [AGENTS.md](AGENTS.md).
 
 ## Dashboard
 
