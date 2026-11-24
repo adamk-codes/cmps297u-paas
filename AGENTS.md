@@ -10,7 +10,8 @@ Deeper docs:
 
 - [docs/architecture.md](docs/architecture.md): components, request/deploy/backup/restore flows, naming conventions.
 - [docs/decisions.md](docs/decisions.md): what changed since the proposal, and open questions.
-- `Project_Proposal_Group4.pdf` and `Project_Proposal_Presentation_Group4.pdf` (outside the repo, one folder up
+- [docs/submission.md](docs/submission.md): final deliverables, rubric, report outline, evidence checklist.
+- Course PDFs (proposal, slides, instructions, rubric, report and poster templates) are outside the repo, one folder up
   in the original author's checkout): the approved proposal. The repo docs summarise them; where they disagree,
   the latest task assignment (below) wins.
 
@@ -26,11 +27,18 @@ Deeper docs:
 The README's folder table says who owns which folder. Stay inside your area. If you need a change in someone
 else's folder or in a shared contract (see below), say so; don't silently edit it.
 
-## Timeline
+## Timeline and what gets graded
 
 - Oct 11 2026: proposal + presentation (done).
-- **Nov 27 2026: implementation and testing done.**
-- Dec 1–4 2026: final presentation (live demo or recorded video).
+- Nov 27 2026: implementation and testing done (team target).
+- **Nov 30 2026, 9:00 a.m.: final submission**: 3–4 page report, A1 poster, 3–5 min video demo, one ZIP of
+  all source/Terraform/config.
+- Dec 1–4 2026: 5-minute pitch + demo; every member answers questions about the whole system.
+
+Grading: demo working end to end (25), architecture and justified trade-offs (20), AWS service exploration (15),
+security / scalability / cost analyses with evidence (7 / 7 / 6), individual Q&A (20). Details, report outline
+and the evidence to capture each session: [docs/submission.md](docs/submission.md). Prefer work that shows up in
+the demo or as measured evidence in the report.
 
 ## Current state of the repo (as of 2026-11-24)
 

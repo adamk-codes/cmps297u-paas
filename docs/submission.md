@@ -1,0 +1,50 @@
+# Final submission: deliverables and grading
+
+Source: course "Project Instructions", "Project Rubric", report and poster templates (PDF/PPTX outside the repo).
+
+## Deadline: Monday, November 30, 2026, 9:00 a.m.
+
+| Deliverable | Format | Notes |
+| --- | --- | --- |
+| Project report | Report template, **3–4 pages** (excl. references and AWS screenshots) | Non-functional analysis (scalability, cost, security) takes 1–2 of those pages |
+| Poster | Poster template (`Project_Poster_Template.pptx`), **A1 landscape** | Architecture must show the system **as built**. QR code to the app is optional |
+| Video demo | **3–5 minutes** | Main workflow and core functionality |
+| Project files | **One ZIP** | Source, Terraform, configuration, everything needed to reproduce |
+
+Presentation (date TBA, after the deadline): **5-minute pitch** (goal, AWS architecture, key design choices), live
+demo recommended. **Every member presents and must be able to answer questions about teammates' work too.**
+
+## Rubric (100 points)
+
+| Criterion | Points | What "strong" needs | Where our evidence comes from |
+| --- | --- | --- | --- |
+| Project challenge and AWS service exploration | 15 | Well-scoped, AWS services used meaningfully | EKS, RDS, S3 + KMS, ECR, ALB, Secrets Manager, Cognito, CloudFront, CloudWatch, CloudTrail, Budgets, each with a real role |
+| Architecture and design choices | 20 | Coherent; choices and trade-offs justified | `docs/architecture.md`, `docs/decisions.md` (Fargate → nodes, path routing, pg_dump vs. snapshots, single-AZ RDS) |
+| Completeness and functionality (demo) | 25 | Core functionality works **end to end** in the demo | Deploy via pipeline → app URL → backup → simulated data loss → restore → recovery URL verified. A failing test blocks a release. Redeploy an old image |
+| Security analysis | 7 | Risks clearly connected to implemented measures | Per-app DB login (show one app can't read the other's DB), IAM role per workload (IRSA), SSE-KMS backups, Secrets Manager, HTTPS, image scan, CloudTrail |
+| Scalability analysis | 7 | Capacity, bottlenecks, limits **with evidence** | Load test + HPA scale-out numbers (Jason); restore duration vs. dump size (Abdulrahman); RDS connections as the bottleneck |
+| Cost analysis | 6 | Monthly estimate: assumptions, per-service costs, total | Pricing calculator, us-east-1, stated hours; compare to real spend from Cost Explorer |
+| Individual Q&A | 20 | Explains system, design, analysis, **own contribution** | Everyone reads `AGENTS.md` + `docs/` before presenting |
+
+Group score (80) is shared; Q&A (20) is individual.
+
+## Report sections (template)
+
+1. Abstract and project goal (one-sentence goal, 100–150-word abstract)
+2. AWS architecture (same figure as the poster, updated to what was built)
+3. AWS services used (service / role / rationale table)
+4. Non-functional analysis: 4.1 scalability and capacity (workload, evidence, limit), 4.2 monthly cost table with
+   pricing basis and date, 4.3 security (assets, risks, measures, remaining limitations)
+5. AI use statement (two sentences: tools used, and how output was reviewed)
+6. References; AWS screenshots showing the services working in our account
+
+## Evidence to capture during cluster sessions
+
+Screenshots and numbers are needed for the report and are only available while the infrastructure is up, so
+capture them every session:
+
+- `kubectl get nodes,pods -A`, ALB in the console, ECR repo with tags, RDS instance, S3 backup objects (with
+  KMS encryption shown), Secrets Manager entries, Cognito pool, CloudTrail events, Budgets alert.
+- Backup/restore: `BACKUP_RESULT` / `RESTORE_RESULT` lines (size, row counts, `durationSeconds`), recovery URL page.
+- HPA during the load test (`kubectl get hpa -w`), pod counts and timing.
+- Cost Explorer for actual spend.
