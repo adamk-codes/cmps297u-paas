@@ -66,6 +66,7 @@ module "eks" {
 
   name                   = local.name
   kubernetes_version     = var.kubernetes_version
+  upgrade_policy         = { support_type = "STANDARD" }
   endpoint_public_access = true # kubectl from laptops and GitHub Actions; auth is still IAM
   enable_irsa            = true
 

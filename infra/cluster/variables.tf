@@ -11,12 +11,12 @@ variable "name" {
 
 variable "kubernetes_version" {
   type    = string
-  default = "1.34"
+  default = "1.35"
 }
 
 variable "node_instance_type" {
   type    = string
-  default = "t3.medium"
+  default = "c7i-flex.large"
 }
 
 variable "node_count" {
