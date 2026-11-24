@@ -44,19 +44,22 @@ the demo or as measured evidence in the report.
 
 - `dashboard/`: React 19 + Vite + TypeScript + Tailwind, rebranded to **Rebound**. Runs fully against an
   in-memory mock (`dashboard/src/api/mock.ts`). Sign-in is mocked in `dashboard/src/lib/auth.tsx`.
-- `sample-apps/notes-app/` (branch `feature/notes-app-backup-restore`): Express + Postgres, 120 seeded notes,
-  `BASE_PATH`, `/healthz`, `/api/stats`, data-loss demo endpoint, `npm test` (8 tests, no DB needed),
-  Dockerfile, docker-compose (app + Postgres 16 + local S3 stand-in `adobe/s3mock`).
-- `jobs/backup-restore/`: one image with `backup` and `restore` commands; prints a `BACKUP_RESULT` /
-  `RESTORE_RESULT` JSON line for the API. `demo-local.sh` runs the full recovery drill locally and passes
-  (120 rows backed up, 80% deleted, 120 restored into a new DB and served by the recovery app).
+- `sample-apps/notes-app/` (PR #1, branch `feature/notes-app-backup-restore`): Express + Postgres, 120 seeded
+  notes, `BASE_PATH`, `/healthz`, `/api/stats`, data-loss demo endpoint, RDS-safe TLS handling (`sslmode` in the
+  URL), `npm test` (12 tests, no DB needed), Dockerfile, docker-compose (Postgres 16 with an admin login +
+  provisioned app login, local S3 stand-in `adobe/s3mock`).
+- `jobs/backup-restore/` (same PR): one image with `provision`, `backup`, `restore`, `isolation-check`; each
+  prints a `*_RESULT` JSON line for the API. `k8s/` has the Job/CronJob/recovery-app manifests, the IRSA IAM
+  policy, and `rebound-data.sh`, which runs every operation on EKS end to end. `demo-local.sh` runs the full
+  drill locally (the earlier version passed: 120 rows backed up, 80% deleted, 120 restored and served).
 - `README.md`, `.gitignore` (ignores `.env*` except `.env.example`, Terraform state, `*.tfvars`),
   `.gitattributes` (LF for `*.sh` and Dockerfiles).
 
-Not yet pushed: `infra/`, `.github/workflows/`, `api/`, `docs/` guides, Kubernetes manifests for the jobs.
+Not yet pushed: `infra/`, `.github/workflows/`, `api/`, `docs/` guides.
 
-Next for data + recovery: Kubernetes Job/CronJob manifests for backup/restore (IRSA for S3), then the
-backup/restore API endpoints that launch those Jobs and parse the result line.
+Not yet verified: the EKS path (`rebound-data.sh`) has only been checked offline (templates rendered and parsed,
+helpers unit-checked); it needs a cluster session. Next for data + recovery: run it on EKS, then the
+backup/restore API endpoints (they can call the same Jobs and parse the same result lines).
 
 ## How it gets deployed (the short version)
 
@@ -90,6 +93,10 @@ Details and diagrams: [docs/architecture.md](docs/architecture.md).
 3. **Backup object key**: `backups/<app>/<timestamp>-<imageTag>.dump` in the backup bucket, `pg_dump -Fc`
    (custom format, so `pg_restore` works). See naming in [docs/architecture.md](docs/architecture.md#naming-conventions).
 4. **Paths**: app at `/apps/<name>`, its recovery copy at `/apps/<name>-recovery`.
+5. **Kubernetes names** (proposed by data + recovery, confirm with the pipeline): namespace `apps`; app
+   Deployment and Service named `<app>`; app DB credentials in Secret `<app>-db` (key `DATABASE_URL`, created by
+   `rebound-data.sh provision`); every Ingress joins the ALB group `alb.ingress.kubernetes.io/group.name: rebound`;
+   app images at `$ECR_REGISTRY/<app>:<tag>`; Secrets Manager names `rebound/apps/<app>/db`.
 
 ## Working rules
 
@@ -108,5 +115,6 @@ Details and diagrams: [docs/architecture.md](docs/architecture.md).
 - Dashboard: `cd dashboard && npm install && npm run dev` (mock mode, any email + 8-char password).
 - Sample app: `cd sample-apps/notes-app && docker compose up --build -d`, then
   `http://localhost:3000/apps/notes-app/`. Tests: `npm install && npm test`.
-- Recovery drill: `bash jobs/backup-restore/demo-local.sh` (needs Docker; Git Bash works on Windows).
+- Recovery drill: `bash jobs/backup-restore/demo-local.sh --fresh` (needs Docker; Git Bash works on Windows).
+- On EKS: `jobs/backup-restore/k8s/rebound-data.sh` (see `jobs/backup-restore/README.md`).
 - Infra (once pushed): see `infra/README.md`; always `terraform destroy` after a session.

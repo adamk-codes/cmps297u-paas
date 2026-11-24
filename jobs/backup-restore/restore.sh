@@ -22,10 +22,10 @@ VERIFY_TABLE="${VERIFY_TABLE:-$(jq -r '."verify-table" // "notes"' <<<"$meta")}"
 valid_table "$VERIFY_TABLE" || die "VERIFY_TABLE is not a valid table name"
 s3 s3 cp "s3://$S3_BUCKET/$BACKUP_KEY" "$dump" --only-show-errors
 
-# Default target: <source db>_restore_<YYYYMMDDHHMM>, e.g. notes_app_restore_202611241830.
+# Default target: <source db>_restore_<YYYYMMDDHHMMSS>, e.g. notes_app_restore_20261124183005.
 if [ -z "${TARGET_DB:-}" ]; then
   base="${source_db:-$(basename "$(dirname "$BACKUP_KEY")" | tr '-' '_')}"
-  TARGET_DB="${base:0:44}_restore_$(date -u +%Y%m%d%H%M)"
+  TARGET_DB="${base:0:40}_restore_$(date -u +%Y%m%d%H%M%S)"
 fi
 valid_identifier "$TARGET_DB" || die "TARGET_DB '$TARGET_DB' must be a lowercase identifier"
 [ -z "${TARGET_OWNER:-}" ] || valid_identifier "$TARGET_OWNER" || die "TARGET_OWNER must be a lowercase identifier"
@@ -36,8 +36,14 @@ exists="$(psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -tAc \
 [ -z "$exists" ] || die "database $TARGET_DB already exists; restores never overwrite a database"
 
 log "creating database $TARGET_DB${TARGET_OWNER:+ owned by $TARGET_OWNER}"
+if [ -n "${TARGET_OWNER:-}" ]; then
+  # Needed on RDS (master is not a superuser); a no-op where the admin already has the role.
+  psql "$ADMIN_DATABASE_URL" -qc "GRANT \"$TARGET_OWNER\" TO CURRENT_USER" >/dev/null 2>&1 || true
+fi
 psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -qc \
   "CREATE DATABASE \"$TARGET_DB\"${TARGET_OWNER:+ OWNER \"$TARGET_OWNER\"}"
+# Same isolation as the live database: only the owner (and the admin) may connect.
+psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -qc "REVOKE ALL ON DATABASE \"$TARGET_DB\" FROM PUBLIC"
 
 target_url="$(url_with_db "$ADMIN_DATABASE_URL" "$TARGET_DB")"
 log "pg_restore into $TARGET_DB"

@@ -1,0 +1,55 @@
+# Scheduled backup, daily at 02:00 UTC. The image tag is read from the running app's /healthz,
+# so the backup is always labelled with the version that was live when it was taken.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ${APP_NAME}-scheduled-backup
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: backup
+    rebound.io/app: ${APP_NAME}
+spec:
+  schedule: "${BACKUP_SCHEDULE}"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid         # never two backups of the same app at once
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: rebound
+        rebound.io/kind: backup
+        rebound.io/app: ${APP_NAME}
+        rebound.io/trigger: scheduled
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: rebound
+            rebound.io/kind: backup
+            rebound.io/app: ${APP_NAME}
+            rebound.io/trigger: scheduled
+        spec:
+          serviceAccountName: rebound-data-jobs
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 70, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: backup
+              image: ${JOBS_IMAGE}
+              args: ["backup"]
+              env:
+                - { name: APP_NAME, value: "${APP_NAME}" }
+                - { name: IMAGE_TAG_URL, value: "http://${APP_NAME}.${NAMESPACE}.svc.cluster.local/apps/${APP_NAME}/healthz" }
+                - { name: S3_BUCKET, value: "${S3_BUCKET}" }
+                - { name: S3_KMS_KEY_ID, value: "${S3_KMS_KEY_ID}" }
+                - { name: AWS_REGION, value: "${AWS_REGION}" }
+                - name: DATABASE_URL
+                  valueFrom: { secretKeyRef: { name: "${APP_NAME}-db", key: DATABASE_URL } }
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits: { memory: 512Mi }
+              securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

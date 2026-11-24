@@ -1,14 +1,42 @@
+import { readFileSync } from 'node:fs'
 import pg from 'pg'
 import { seedNotes } from './seed.js'
 
 // Arbitrary constant so concurrent replicas don't create/seed the table at the same time.
 const SCHEMA_LOCK_ID = 297_004
 
-export function createPool({ databaseUrl, databaseSsl }) {
+// node-postgres lets `sslmode` in the URL override the `ssl` option, and treats `require` as
+// full certificate verification, which fails against RDS without its CA bundle. So we take sslmode
+// out of the URL and build the TLS options ourselves:
+//   disable                      -> no TLS
+//   require / prefer / no-verify -> TLS, certificate not verified (encrypted in transit)
+//   verify-ca / verify-full      -> TLS, verified (pass the RDS bundle via DATABASE_CA_FILE)
+// DATABASE_SSL=true turns TLS on when the URL doesn't say; DATABASE_CA_FILE always enables verification.
+export function resolveConnection({ databaseUrl, databaseSsl = false, databaseCa }) {
+  let url
+  try {
+    url = new URL(databaseUrl)
+  } catch {
+    return { connectionString: databaseUrl, ssl: databaseSsl ? { rejectUnauthorized: false } : undefined }
+  }
+  const mode = url.searchParams.get('sslmode')
+  for (const p of ['sslmode', 'ssl', 'sslrootcert', 'sslcert', 'sslkey', 'uselibpqcompat']) url.searchParams.delete(p)
+  const connectionString = url.toString()
+
+  if (databaseCa) return { connectionString, ssl: { rejectUnauthorized: true, ca: databaseCa } }
+  if (mode === 'disable') return { connectionString, ssl: undefined }
+  if (mode === 'verify-ca' || mode === 'verify-full') return { connectionString, ssl: { rejectUnauthorized: true } }
+  if (mode || databaseSsl) return { connectionString, ssl: { rejectUnauthorized: false } }
+  return { connectionString, ssl: undefined }
+}
+
+export function createPool({ databaseUrl, databaseSsl, databaseCaFile }) {
   if (!databaseUrl) throw new Error('DATABASE_URL is not set')
+  const databaseCa = databaseCaFile ? readFileSync(databaseCaFile, 'utf8') : undefined
+  const { connectionString, ssl } = resolveConnection({ databaseUrl, databaseSsl, databaseCa })
   return new pg.Pool({
-    connectionString: databaseUrl,
-    ssl: databaseSsl ? { rejectUnauthorized: false } : undefined,
+    connectionString,
+    ssl,
     max: 5,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,

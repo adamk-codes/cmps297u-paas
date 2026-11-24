@@ -1,16 +1,20 @@
-# Local stack for notes-app and the backup/restore jobs. No AWS needed.
+# Local stack for notes-app and the data/recovery jobs. No AWS needed. Mirrors RDS: an admin login
+# (like the RDS master user) plus a restricted login per app, created by the `provision` job.
 #
-#   docker compose up --build -d                    app + Postgres + local S3 stand-in
+#   docker compose up --build -d                    Postgres + provision + app + local S3 stand-in
 #   open http://localhost:3000/apps/notes-app/
 #   docker compose run --rm backup                  pg_dump -> s3://rebound-backups/backups/notes-app/...
 #   docker compose run --rm -e BACKUP_KEY=<key> restore     new DB + pg_restore + row-count check
 #   RECOVERY_DB=<db> docker compose --profile recovery up -d notes-app-recovery   (port 3001)
+#   docker compose run --rm -e APP_NAME=shop-api -e DB_PASSWORD=shop_api_local_pw provision
+#   docker compose run --rm -e OTHER_DATABASE=shop_api isolation-check
 #
 # Or run the whole drill: ../../jobs/backup-restore/demo-local.sh
 
 name: notes-app
 
-x-db-url: &db-url postgres://notes_app:notes_app_local@postgres:5432/notes_app
+x-admin-url: &admin-url postgres://postgres:postgres_local_pw@postgres:5432/postgres
+x-db-url: &db-url postgres://notes_app:notes_app_local_pw@postgres:5432/notes_app
 x-s3-env: &s3-env
   S3_BUCKET: rebound-backups
   S3_ENDPOINT: http://s3:9090
@@ -18,21 +22,36 @@ x-s3-env: &s3-env
   AWS_ACCESS_KEY_ID: local
   AWS_SECRET_ACCESS_KEY: local
   AWS_DEFAULT_REGION: us-east-1
+x-jobs: &jobs
+  image: rebound/backup-restore:local
+  build: ../../jobs/backup-restore
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: notes_app
-      POSTGRES_PASSWORD: notes_app_local
-      POSTGRES_DB: notes_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_local_pw
+      POSTGRES_DB: postgres
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U notes_app -d notes_app"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 3s
       timeout: 3s
       retries: 20
+
+  # Creates the notes_app database and its restricted login (same job the platform runs on RDS).
+  # Re-run by hand for another app: docker compose run --rm -e APP_NAME=<app> -e DB_PASSWORD=<pw> provision
+  provision:
+    <<: *jobs
+    command: ["provision"]
+    environment:
+      ADMIN_DATABASE_URL: *admin-url
+      APP_NAME: notes-app
+      DB_PASSWORD: notes_app_local_pw     # fixed locally so DATABASE_URL above is known; random on AWS
+    depends_on:
+      postgres: { condition: service_healthy }
 
   notes-app:
     build:
@@ -47,14 +66,14 @@ services:
       ALLOW_DATA_LOSS_DEMO: "true"
     ports: ["3000:3000"]
     depends_on:
-      postgres: { condition: service_healthy }
+      provision: { condition: service_completed_successfully }
 
   # Same image pointed at a restored database, like /apps/notes-app-recovery on the cluster.
   notes-app-recovery:
     profiles: [recovery]
     image: notes-app:${IMAGE_TAG:-local}
     environment:
-      DATABASE_URL: postgres://notes_app:notes_app_local@postgres:5432/${RECOVERY_DB:-notes_app}
+      DATABASE_URL: postgres://notes_app:notes_app_local_pw@postgres:5432/${RECOVERY_DB:-notes_app}
       BASE_PATH: /apps/notes-app-recovery
       APP_NAME: notes-app
       SEED_COUNT: "0"
@@ -72,8 +91,7 @@ services:
 
   # One-shot: waits for the S3 stand-in and makes sure the backup bucket exists.
   s3-init:
-    image: rebound/backup-restore:local
-    build: ../../jobs/backup-restore
+    <<: *jobs
     entrypoint:
       - bash
       - -c
@@ -87,13 +105,12 @@ services:
     depends_on: [s3]
 
   backup:
+    <<: *jobs
     profiles: [tools]
-    image: rebound/backup-restore:local
-    build: ../../jobs/backup-restore
     command: ["backup"]
     environment:
       <<: *s3-env
-      DATABASE_URL: *db-url
+      DATABASE_URL: *db-url          # the app's own restricted login is enough to dump its database
       APP_NAME: notes-app
       IMAGE_TAG: ${IMAGE_TAG:-local}
     depends_on:
@@ -101,19 +118,27 @@ services:
       s3-init: { condition: service_completed_successfully }
 
   restore:
+    <<: *jobs
     profiles: [tools]
-    image: rebound/backup-restore:local
-    build: ../../jobs/backup-restore
     command: ["restore"]
     environment:
       <<: *s3-env
-      # Restores need a login that may CREATE DATABASE (the RDS master user on AWS).
-      ADMIN_DATABASE_URL: *db-url
+      ADMIN_DATABASE_URL: *admin-url # CREATE DATABASE needs the admin (RDS master) login
       BACKUP_KEY: ${BACKUP_KEY:-}
       TARGET_OWNER: notes_app
     depends_on:
       postgres: { condition: service_healthy }
       s3-init: { condition: service_completed_successfully }
+
+  isolation-check:
+    <<: *jobs
+    profiles: [tools]
+    command: ["isolation-check"]
+    environment:
+      DATABASE_URL: *db-url
+      OTHER_DATABASE: ${OTHER_DATABASE:-shop_api}
+    depends_on:
+      postgres: { condition: service_healthy }
 
 volumes:
   pgdata:

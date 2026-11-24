@@ -7,6 +7,12 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
 require_env DATABASE_URL APP_NAME S3_BUCKET
+# Scheduled backups don't know which image is live, so ask the running app: its /healthz reports
+# imageTag (IMAGE_TAG_URL, e.g. http://notes-app.apps.svc.cluster.local/apps/notes-app/healthz).
+if [ -z "${IMAGE_TAG:-}" ] && [ -n "${IMAGE_TAG_URL:-}" ]; then
+  IMAGE_TAG="$(wget -qO- -T 5 "$IMAGE_TAG_URL" 2>/dev/null | jq -r '.imageTag // empty' 2>/dev/null || true)"
+  [ -n "$IMAGE_TAG" ] && log "running app reports image $IMAGE_TAG" || log "could not read image tag from $IMAGE_TAG_URL"
+fi
 IMAGE_TAG="${IMAGE_TAG:-unknown}"
 S3_PREFIX="${S3_PREFIX:-backups}"
 VERIFY_TABLE="${VERIFY_TABLE:-notes}"

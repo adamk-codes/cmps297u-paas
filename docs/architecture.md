@@ -75,7 +75,7 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
 | App path | `/apps/<name>` | `/apps/notes-app` |
 | Recovery path | `/apps/<name>-recovery` | `/apps/notes-app-recovery` |
 | App database | `<name>` with `-` → `_` | `notes_app` |
-| Restored database | `<appdb>_restore_<YYYYMMDDHHMM>` | `notes_app_restore_202611241830` |
+| Restored database | `<appdb>_restore_<YYYYMMDDHHMMSS>` | `notes_app_restore_20261124183005` |
 | Backup key | `backups/<app>/<timestamp>-<imageTag>.dump` | `backups/notes-app/20261124T183000Z-3f9c2ab.dump` |
 | Timestamp in keys | UTC, `YYYYMMDDTHHMMSSZ` (no `:` so it's S3/shell safe) | `20261124T183000Z` |
 

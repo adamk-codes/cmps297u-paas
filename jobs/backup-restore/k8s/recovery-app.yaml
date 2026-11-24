@@ -1,0 +1,82 @@
+# The recovery copy: the image recorded with the backup, pointed at the restored database, served at
+# /apps/<app>-recovery on the shared ALB. Separate from the live app, so it can be checked before use.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${APP_NAME}-recovery
+  namespace: ${NAMESPACE}
+  labels: &labels
+    app.kubernetes.io/name: ${APP_NAME}-recovery
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: recovery
+    rebound.io/app: ${APP_NAME}
+  annotations:
+    rebound.io/backup-key: "${BACKUP_KEY}"
+    rebound.io/restored-database: "${TARGET_DB}"
+    rebound.io/operation-id: "${OPERATION_ID}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: "${APP_NAME}-recovery" }
+  template:
+    metadata:
+      labels: *labels
+      annotations:
+        # Changes on every restore, so the pods restart and pick up the new database.
+        rebound.io/restored-database: "${TARGET_DB}"
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: app
+          image: ${APP_IMAGE}
+          ports: [{ name: http, containerPort: 3000 }]
+          env:
+            - { name: BASE_PATH, value: "/apps/${APP_NAME}-recovery" }
+            - { name: APP_NAME, value: "${APP_NAME}" }
+            - { name: SEED_COUNT, value: "0" }          # never seed a restored database
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: "${APP_NAME}-recovery-db", key: DATABASE_URL } }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${APP_NAME}-recovery
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, rebound.io/kind: recovery, rebound.io/app: "${APP_NAME}" }
+spec:
+  selector: { app.kubernetes.io/name: "${APP_NAME}-recovery" }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${APP_NAME}-recovery
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, rebound.io/kind: recovery, rebound.io/app: "${APP_NAME}" }
+  annotations:
+    # Joins the one shared ALB (same group.name as the live apps' Ingresses).
+    alb.ingress.kubernetes.io/group.name: ${ALB_GROUP}
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /apps/${APP_NAME}-recovery/healthz
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /apps/${APP_NAME}-recovery
+            pathType: Prefix
+            backend:
+              service: { name: "${APP_NAME}-recovery", port: { name: http } }
