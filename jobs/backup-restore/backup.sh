@@ -40,7 +40,7 @@ log "dump of '$database' is $size bytes${rows:+, $VERIFY_TABLE has $rows rows}"
 
 STEP=store
 log "uploading to s3://$S3_BUCKET/$key"
-metadata="app=${APP_NAME},image-tag=${safe_tag},database=${database},verify-table=${VERIFY_TABLE}"
+metadata="app=${APP_NAME},image-tag=${safe_tag},database=${database},verify-table=${VERIFY_TABLE},trigger=${BACKUP_TRIGGER:-manual}"
 [ -n "$rows" ] && metadata="${metadata},row-count=${rows}"
 mapfile -t sse < <(sse_args)
 s3 s3 cp "$dump" "s3://$S3_BUCKET/$key" --only-show-errors --metadata "$metadata" "${sse[@]}"

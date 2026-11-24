@@ -43,6 +43,7 @@ spec:
               args: ["backup"]
               env:
                 - { name: APP_NAME, value: "${APP_NAME}" }
+                - { name: BACKUP_TRIGGER, value: scheduled }
                 - { name: IMAGE_TAG_URL, value: "http://${APP_NAME}.${NAMESPACE}.svc.cluster.local/apps/${APP_NAME}/healthz" }
                 - { name: S3_BUCKET, value: "${S3_BUCKET}" }
                 - { name: S3_KMS_KEY_ID, value: "${S3_KMS_KEY_ID}" }

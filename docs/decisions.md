@@ -32,8 +32,10 @@ destroy per work session, budget alerts.
 
 1. **Terraform state**: remote backend (S3 + lock) so everyone can apply/destroy, or only Ahmad runs it?
 2. **Cluster access**: are all four IAM users added as EKS access entries? Same AWS account for everyone (assumed yes).
-3. **API stack and location**: language/framework for `api/`, and how it launches Jobs (Kubernetes API from a
-   pod with RBAC is the likely route). Jason owns deploy endpoints, Abdulrahman backup/restore endpoints.
+3. **API stack and location**: *Done for data:* `api/` is Node 20 + Express (same as the sample apps). It
+   launches Jobs by running `rebound-data.sh` (kubectl in the pod, namespaced RBAC). Jason: add deploy endpoints
+   to the same package (routes in `src/app.js`, operation kinds in `src/steps.js`), or tell us if you prefer
+   a separate service behind `/api/deploy`.
 4. **Image tag format**: git short SHA, semver, or both? Needed for backup keys.
 5. **DB credentials in the cluster**: *Proposed:* `rebound-data.sh provision <app>` writes Secrets Manager
    `rebound/apps/<app>/db` and the Kubernetes Secret `<app>-db`; the pipeline's Deployment reads `DATABASE_URL`

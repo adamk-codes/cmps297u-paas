@@ -13,7 +13,7 @@ deployment, gets an application URL, and can back up and restore its data — al
 | `dashboard/` | React dashboard (Cognito sign-in, apps, deploys, backups) | Adam |
 | `sample-apps/` | Sample Node.js apps (`notes-app/`: Express + Postgres, Dockerfile, docker-compose) | Abdulrahman (notes-app) / Adam |
 | `jobs/` | Backup and restore job image (`jobs/backup-restore/`: pg_dump to S3, restore into a new DB + verify) | Abdulrahman |
-| `api/` | Platform API: deployments, databases, backups, restores | Jason / Abdulrahman |
+| `api/` | Platform API (Node + Express): backups, restores, operations done; deploy endpoints next | Abdulrahman (data) / Jason (deploy) |
 | `infra/` | Terraform: network, EKS (managed nodes), ECR, load balancer, RDS, S3, IAM, Cognito | Ahmad |
 | `.github/workflows/` | CI/CD: test, build, scan, push to ECR, release | Jason |
 | `docs/` | Deployment and recovery guide, test results, cost report | Adam |

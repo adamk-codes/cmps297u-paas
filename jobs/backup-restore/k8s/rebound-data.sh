@@ -122,6 +122,7 @@ cmd_backup() {
   fi
   export IMAGE_TAG="${IMAGE_TAG:-unknown}"
   new_operation backup
+  log "::step dump"
   log "operation $OPERATION_ID: backing up $APP_NAME (image $IMAGE_TAG)"
   apply backup-job.yaml
   wait_job "$JOB_NAME" 900 || die "backup failed"
@@ -145,8 +146,8 @@ cmd_restore() {
   local key="${2:-latest}" started active result image_tag app_url records stats served url total
   started=$(date +%s)
 
-  # One restore at a time, across all apps.
-  active="$(kubectl get jobs -A -l rebound.io/kind=restore -o jsonpath='{range .items[*]}{.status.active}{end}')"
+  # One restore at a time, across all apps in the namespace.
+  active="$(k get jobs -l rebound.io/kind=restore -o jsonpath='{range .items[*]}{.status.active}{end}')"
   [ -z "${active//0/}" ] || die "a restore is already running; restores run one at a time"
 
   if [ "$key" = latest ]; then
@@ -157,6 +158,7 @@ cmd_restore() {
   export BACKUP_KEY="$key"
   export TARGET_DB="${DB_NAME:0:40}_restore_$(date -u +%Y%m%d%H%M%S)"
   new_operation restore
+  log "::step restore"
   log "operation $OPERATION_ID: restoring $BACKUP_KEY into $TARGET_DB"
   apply restore-job.yaml
   wait_job "$JOB_NAME" 1200 || die "restore failed (live database untouched)"
@@ -174,10 +176,12 @@ cmd_restore() {
     log "backup has no usable image tag; using the live image $APP_IMAGE"
   fi
   export APP_IMAGE
+  log "::step run"
   log "starting recovery app ($APP_IMAGE) at /apps/$APP_NAME-recovery"
   apply recovery-app.yaml
   k rollout status "deploy/$APP_NAME-recovery" --timeout=300s >&2 || die "recovery app did not become ready"
 
+  log "::step check"
   # Check through the running recovery app, not just the database.
   stats="$(k exec "deploy/$APP_NAME-recovery" -- wget -qO- "http://127.0.0.1:3000/apps/$APP_NAME-recovery/api/stats")"
   served="$(jq -r .notes <<<"$stats")"

@@ -1,0 +1,148 @@
+# Rebound API on EKS. Render with envsubst (same variables as jobs/backup-restore/k8s/.env, plus
+# API_IMAGE, API_ROLE_ARN, COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, DASHBOARD_ORIGIN):
+#   set -a; source jobs/backup-restore/k8s/.env; set +a
+#   envsubst < api/k8s/api.yaml | kubectl apply -f -
+# The platform database URL comes from Secret rebound-platform-db, created by
+# `jobs/backup-restore/k8s/rebound-data.sh provision rebound-platform`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rebound-api
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, app.kubernetes.io/name: rebound-api }
+  annotations:
+    # IAM role (IRSA) with read access to the backup bucket (listing backups) — see api/k8s/iam-policy.json.
+    eks.amazonaws.com/role-arn: ${API_ROLE_ARN}
+---
+# Least privilege inside the cluster: only the apps namespace, only what rebound-data.sh does.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rebound-api
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound }
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/exec]            # recovery check: wget the recovery app's /api/stats from inside its pod
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]              # read <app>-db, write <app>-recovery-db
+    verbs: [get, create, patch, update]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, list, create, patch, update]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, create, patch, update]
+  - apiGroups: [apps]
+    resources: [replicasets]          # kubectl rollout status
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, create, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rebound-api
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound }
+subjects:
+  - kind: ServiceAccount
+    name: rebound-api
+    namespace: ${NAMESPACE}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rebound-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rebound-api
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, app.kubernetes.io/name: rebound-api }
+spec:
+  # One replica: restores are serialised and in-flight operations are tracked by this process.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: rebound-api }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/part-of: rebound, app.kubernetes.io/name: rebound-api }
+    spec:
+      serviceAccountName: rebound-api
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: api
+          image: ${API_IMAGE}
+          ports: [{ name: http, containerPort: 8080 }]
+          env:
+            - { name: EXECUTOR, value: kubernetes }
+            - { name: NAMESPACE, value: "${NAMESPACE}" }
+            - { name: AWS_REGION, value: "${AWS_REGION}" }
+            - { name: S3_BUCKET, value: "${S3_BUCKET}" }
+            - { name: S3_KMS_KEY_ID, value: "${S3_KMS_KEY_ID}" }
+            - { name: JOBS_IMAGE, value: "${JOBS_IMAGE}" }
+            - { name: ECR_REGISTRY, value: "${ECR_REGISTRY}" }
+            - { name: APP_IMAGE_REPO, value: "${APP_IMAGE_REPO}" }
+            - { name: ALB_GROUP, value: "${ALB_GROUP}" }
+            - { name: ALB_URL, value: "${ALB_URL}" }
+            - { name: MIN_ROWS, value: "${MIN_ROWS}" }
+            - { name: COGNITO_USER_POOL_ID, value: "${COGNITO_USER_POOL_ID}" }
+            - { name: COGNITO_CLIENT_ID, value: "${COGNITO_CLIENT_ID}" }
+            - { name: CORS_ORIGINS, value: "${DASHBOARD_ORIGIN}" }
+            - name: PLATFORM_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: rebound-platform-db, key: DATABASE_URL } }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 160Mi }
+            limits: { memory: 384Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rebound-api
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound }
+spec:
+  selector: { app.kubernetes.io/name: rebound-api }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rebound-api
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound }
+  annotations:
+    alb.ingress.kubernetes.io/group.name: ${ALB_GROUP}
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /api/healthz
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: rebound-api, port: { name: http } }

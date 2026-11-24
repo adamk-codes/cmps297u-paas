@@ -130,6 +130,26 @@ services:
       postgres: { condition: service_healthy }
       s3-init: { condition: service_completed_successfully }
 
+  # The platform API (backups/restores) running the same scripts directly. For the dashboard:
+  #   docker compose --profile api up --build -d api     -> VITE_API_URL=http://localhost:8080
+  api:
+    profiles: [api]
+    build:
+      context: ../..
+      dockerfile: api/Dockerfile
+    image: rebound-api:local
+    environment:
+      <<: *s3-env
+      EXECUTOR: process
+      ADMIN_DATABASE_URL: *admin-url
+      LOCAL_APPS: '{"notes-app":{"databaseUrl":"postgres://notes_app:notes_app_local_pw@postgres:5432/notes_app","healthUrl":"http://notes-app:3000/healthz"}}'
+      RECOVERY_URL_TEMPLATE: http://localhost:3001/apps/{app}-recovery/
+      CORS_ORIGINS: http://localhost:5173
+    ports: ["8080:8080"]
+    depends_on:
+      notes-app: { condition: service_started }
+      s3-init: { condition: service_completed_successfully }
+
   isolation-check:
     <<: *jobs
     profiles: [tools]

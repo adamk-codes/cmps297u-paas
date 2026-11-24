@@ -52,14 +52,20 @@ the demo or as measured evidence in the report.
   prints a `*_RESULT` JSON line for the API. `k8s/` has the Job/CronJob/recovery-app manifests, the IRSA IAM
   policy, and `rebound-data.sh`, which runs every operation on EKS end to end. `demo-local.sh` runs the full
   drill locally (the earlier version passed: 120 rows backed up, 80% deleted, 120 restored and served).
+- `api/` (same PR): Node 20 + Express platform API, **data + recovery endpoints done** (backups, restores,
+  operations) in the dashboard's exact shapes; Cognito JWT auth, idempotency keys, one restore at a time,
+  operation history in the platform DB (or memory). Runs the scripts directly (`EXECUTOR=process`) or through
+  `rebound-data.sh` on EKS (`EXECUTOR=kubernetes`). Dockerfile (repo-root context), `k8s/api.yaml` (namespaced
+  RBAC, `/api` on the shared ALB). 17 tests. **Deploy endpoints are not built** (apps, deploy, redeploy, logs,
+  approved repos): add them as routes + operation kinds in the same package.
 - `README.md`, `.gitignore` (ignores `.env*` except `.env.example`, Terraform state, `*.tfvars`),
-  `.gitattributes` (LF for `*.sh` and Dockerfiles).
+  `.gitattributes` (LF for `*.sh` and Dockerfiles), `.dockerignore` (repo-root builds).
 
-Not yet pushed: `infra/`, `.github/workflows/`, `api/`, `docs/` guides.
+Not yet pushed by anyone: `infra/`, `.github/workflows/`, `docs/` guides.
 
-Not yet verified: the EKS path (`rebound-data.sh`) has only been checked offline (templates rendered and parsed,
-helpers unit-checked); it needs a cluster session. Next for data + recovery: run it on EKS, then the
-backup/restore API endpoints (they can call the same Jobs and parse the same result lines).
+Not yet verified: the EKS path (`rebound-data.sh`, `api/k8s/api.yaml`) has only been checked offline (templates
+rendered and parsed, helpers unit-checked); the API's `PgStore` and Docker image haven't run yet; the latest
+`demo-local.sh` (with provision + isolation) hasn't run. All need Docker or a cluster session.
 
 ## How it gets deployed (the short version)
 
