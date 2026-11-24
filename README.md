@@ -14,9 +14,10 @@ deployment, gets an application URL, and can back up and restore its data — al
 | `sample-apps/` | Sample Node.js apps (`notes-app/`: Express + Postgres, Dockerfile, docker-compose) | Abdulrahman (notes-app) / Adam |
 | `jobs/` | Backup and restore job image (`jobs/backup-restore/`: pg_dump to S3, restore into a new DB + verify) | Abdulrahman |
 | `api/` | Platform API (Node + Express): backups, restores, operations done; deploy endpoints next | Abdulrahman (data) / Jason (deploy) |
-| `infra/` | Terraform: network, EKS (managed nodes), ECR, load balancer, RDS, S3, IAM, Cognito | Ahmad |
+| `infra/` | Terraform: `foundation/` (KMS, S3, ECR, Cognito, CloudFront, CI role, budgets, CloudTrail) and `cluster/` (VPC, EKS, ALB controller, RDS, IRSA); `scripts/up.sh`, `down.sh` | Ahmad (drafted by Abdulrahman) |
+| `deploy/` | Generic app template (Deployment, Service, Ingress, HPA) and `deploy-app.sh` | Jason / Abdulrahman |
 | `.github/workflows/` | CI/CD: test, build, scan, push to ECR, release | Jason |
-| `docs/` | Deployment and recovery guide, test results, cost report | Adam |
+| `docs/` | Architecture, decisions, submission checklist, cost estimate; later the guides | Adam / all |
 
 Folders are added as each part of the project starts. Context for contributors and coding agents: [AGENTS.md](AGENTS.md).
 

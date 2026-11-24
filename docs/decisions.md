@@ -28,6 +28,20 @@ destroy per work session, budget alerts.
 | TLS to RDS without CA verification by default (`sslmode=require`) | Works with RDS out of the box; traffic is encrypted | Not protected against an active MITM inside the VPC; set `DATABASE_CA_FILE` to the RDS bundle to verify |
 | Local S3 = `adobe/s3mock` | MinIO stopped publishing public images | No KMS locally (`S3_SSE=""`) |
 
+## Infrastructure decisions (Nov 2026)
+
+| Decision | Why | Trade-off |
+| --- | --- | --- |
+| Two Terraform stacks: `foundation` (keep) and `cluster` (per session) | Only hourly resources are destroyed; backups, images, users and the public URL survive; a restore can use a backup from an earlier session | Two applies; the cluster stack looks up foundation resources by name |
+| CloudFront in front of S3 (dashboard) **and** the ALB (`/api`, `/apps`) | HTTPS without a custom domain or certificate, one origin (no CORS), stable URL across sessions | CloudFront → ALB is HTTP inside AWS; `up.sh` must re-point the origin each session (a few minutes) |
+| Shared Terraform state in S3 with native locking (`use_lockfile`) | Any team member can run `up.sh` / `down.sh` | Foundation state starts local and is migrated once |
+| EKS access entries (not `aws-auth`), CI limited to the `apps` namespace | Native IAM-based access, least privilege for CI | Each member's IAM ARN must be listed |
+| IRSA roles per workload; GitHub OIDC for CI; RDS-managed master secret | No long-lived AWS keys or DB passwords anywhere in code, CI or state | — |
+| One customer-managed KMS key for S3, RDS, secrets, EKS Secrets, ECR, CloudTrail | Encryption story in one place; key rotation on | One key's policy governs all of it |
+| ECR immutable tags, keep 30 images | A backup's image tag always means the same image and stays available for 30 days of backups | Re-tagging is impossible (by design) |
+| Dashboard calls Cognito directly (no Amplify) | Small bundle, one file to review, works with the existing auth context | Only password + new-password flows (no MFA/SRP UI) |
+| Redeploy only to tags in the app's history; new apps via CI (`POST /api/apps` → 501) | Builds/tests/scans belong in the pipeline; the API never builds code | Dashboard "Deploy new app" needs the pipeline to work |
+
 ## Open questions (ask the team; record the answer here)
 
 1. **Terraform state**: remote backend (S3 + lock) so everyone can apply/destroy, or only Ahmad runs it?

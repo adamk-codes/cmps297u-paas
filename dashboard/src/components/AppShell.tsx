@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Activity, ChevronDown, Grip, History, LogOut, Menu, SlidersHorizontal, UserRound, Wallet, X } from 'lucide-react'
-import { api } from '../api'
+import { api, usingMock } from '../api'
 import { useAsync } from '../lib/hooks'
 import { useAuth } from '../lib/auth'
 import { cx, Logo } from './ui'
@@ -21,16 +21,27 @@ function ClusterStatus() {
   const { reload } = apps
   useEffect(() => void reload(), [pathname, reload])
   const count = apps.data?.length
+  const region = apps.data?.[0]?.region || import.meta.env.VITE_AWS_REGION || 'us-east-1'
+  // Online = the platform API answered. Between work sessions the cluster is destroyed and this goes offline.
+  const state = apps.error ? 'offline' : apps.data ? 'online' : 'checking'
 
   return (
     <div className="m-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <p className="flex items-center gap-2 font-mono text-xs text-slate-600">
-        <span className="size-2 rounded-full bg-emerald-600" />
-        us-west-2
+        <span
+          className={cx(
+            'size-2 rounded-full',
+            state === 'online' ? 'bg-emerald-600' : state === 'offline' ? 'bg-red-500' : 'bg-slate-400',
+          )}
+        />
+        {region}
       </p>
-      <p className="mt-1.5 text-sm font-medium text-slate-900">Cluster online</p>
+      <p className="mt-1.5 text-sm font-medium text-slate-900">
+        {state === 'online' ? 'Cluster online' : state === 'offline' ? 'Cluster offline' : 'Checking cluster…'}
+      </p>
       <p className="text-xs text-slate-500">
-        {count === undefined ? '…' : `${count} ${count === 1 ? 'app' : 'apps'}`}
+        {usingMock ? 'Mock data · ' : ''}
+        {count === undefined ? (state === 'offline' ? 'No session running' : '…') : `${count} ${count === 1 ? 'app' : 'apps'}`}
       </p>
     </div>
   )

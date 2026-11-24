@@ -8,7 +8,7 @@ const inputCls =
   'h-11 w-full rounded-lg border border-slate-300 bg-white pl-11 text-[15px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
 
 export function SignIn() {
-  const { user, signIn } = useAuth()
+  const { user, signIn, completeNewPassword } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? '/apps'
@@ -18,6 +18,9 @@ export function SignIn() {
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // First Cognito sign-in uses the emailed temporary password, then asks for a permanent one.
+  const [needsNewPassword, setNeedsNewPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
 
   if (user) return <Navigate to={from} replace />
 
@@ -26,7 +29,13 @@ export function SignIn() {
     setSubmitting(true)
     setError(null)
     try {
-      await signIn(email.trim(), password)
+      if (needsNewPassword) {
+        await completeNewPassword(newPassword)
+      } else if ((await signIn(email.trim(), password)) === 'newPasswordRequired') {
+        setNeedsNewPassword(true)
+        setSubmitting(false)
+        return
+      }
       navigate(from, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed')
@@ -90,11 +99,37 @@ export function SignIn() {
             </div>
           </div>
 
+          {needsNewPassword && (
+            <div>
+              <label htmlFor="new-password" className="mb-1.5 block text-sm font-medium text-slate-800">
+                Choose a new password
+              </label>
+              <p className="mb-2 text-sm text-slate-600">
+                This is your first sign-in. Use at least 12 characters with upper- and lowercase letters and a number.
+              </p>
+              <div className="relative">
+                <LockKeyhole className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-slate-500" strokeWidth={1.5} />
+                <input
+                  id="new-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  required
+                  autoFocus
+                  minLength={12}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+          )}
+
           {error && <ErrorBanner message={error} />}
 
           <Button type="submit" size="lg" className="w-full" disabled={submitting}>
             {submitting ? <Spinner /> : null}
-            Sign in
+            {needsNewPassword ? 'Set password and sign in' : 'Sign in'}
             {!submitting && <ArrowRight className="size-5" />}
           </Button>
         </form>

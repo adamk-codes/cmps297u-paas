@@ -24,6 +24,10 @@ Deeper docs:
 | Abdulrahman Kaddoura | Data + recovery | `sample-apps/notes-app/` (Node + Express + Postgres, 100+ rows, `DATABASE_URL` + `BASE_PATH`, `/healthz`), Dockerfile + docker-compose. Then backup script/Job (pg_dump → S3) and restore script/Job (new DB + recovery URL), plus their API endpoints. |
 | Adam Al Khatib | Dashboard + docs | HTTP client implementing `PlatformApi` against the real API (switchable with the mock), dashboard on S3 + CloudFront. Later: budget field, cost page, poster draft. Owns `docs/` guides. |
 
+**Update 2026-11-24:** Ahmad and Adam have an exam, so Abdulrahman took over their tasks for now: the Terraform
+(`infra/`), the dashboard HTTP client + Cognito sign-in, and S3 + CloudFront hosting are in PR #1. Ahmad and Adam
+should review those parts when they're back.
+
 The README's folder table says who owns which folder. Stay inside your area. If you need a change in someone
 else's folder or in a shared contract (see below), say so; don't silently edit it.
 
@@ -42,8 +46,10 @@ the demo or as measured evidence in the report.
 
 ## Current state of the repo (as of 2026-11-24)
 
-- `dashboard/`: React 19 + Vite + TypeScript + Tailwind, rebranded to **Rebound**. Runs fully against an
-  in-memory mock (`dashboard/src/api/mock.ts`). Sign-in is mocked in `dashboard/src/lib/auth.tsx`.
+- `dashboard/`: React 19 + Vite + TypeScript + Tailwind, rebranded to **Rebound**. `src/api/index.ts` switches
+  between the in-memory mock and the real API (`src/api/http.ts`) with `VITE_API_URL` / `VITE_USE_MOCK`.
+  Cognito sign-in without Amplify (`src/lib/cognito.ts`, first-sign-in new password, token refresh); mocked
+  when no Cognito client is configured. Checked in a browser against the real API running locally.
 - `sample-apps/notes-app/` (PR #1, branch `feature/notes-app-backup-restore`): Express + Postgres, 120 seeded
   notes, `BASE_PATH`, `/healthz`, `/api/stats`, data-loss demo endpoint, RDS-safe TLS handling (`sslmode` in the
   URL), `npm test` (12 tests, no DB needed), Dockerfile, docker-compose (Postgres 16 with an admin login +
@@ -55,17 +61,25 @@ the demo or as measured evidence in the report.
 - `api/` (same PR): Node 20 + Express platform API, **data + recovery endpoints done** (backups, restores,
   operations) in the dashboard's exact shapes; Cognito JWT auth, idempotency keys, one restore at a time,
   operation history in the platform DB (or memory). Runs the scripts directly (`EXECUTOR=process`) or through
-  `rebound-data.sh` on EKS (`EXECUTOR=kubernetes`). Dockerfile (repo-root context), `k8s/api.yaml` (namespaced
-  RBAC, `/api` on the shared ALB). 17 tests. **Deploy endpoints are not built** (apps, deploy, redeploy, logs,
-  approved repos): add them as routes + operation kinds in the same package.
-- `README.md`, `.gitignore` (ignores `.env*` except `.env.example`, Terraform state, `*.tfvars`),
-  `.gitattributes` (LF for `*.sh` and Dockerfiles), `.dockerignore` (repo-root builds).
+  `rebound-data.sh` on EKS (`EXECUTOR=kubernetes`). Also app endpoints read from Kubernetes (list, detail,
+  logs, approved repos) and **redeploy of an image from the app's history**. Dockerfile (repo-root context),
+  `k8s/api.yaml` (namespaced RBAC, `/api` on the shared ALB). 22 tests. **New-app deploy (`POST /api/apps`)
+  returns 501**: new apps go through the CI pipeline (Jason).
+- `infra/` (same PR): Terraform in two stacks. `foundation/` (keep): KMS, backup + state buckets, ECR, Cognito,
+  dashboard S3 + CloudFront (one HTTPS URL for dashboard, `/api`, `/apps`), GitHub OIDC CI role, budgets,
+  CloudTrail. `cluster/` (each session): VPC, EKS 2 × t3.medium, ALB controller, metrics-server, RDS, IRSA
+  roles. `scripts/up.sh` / `down.sh` run a whole session. See `infra/README.md`.
+- `deploy/` (same PR): generic app template (Deployment, Service, Ingress, HPA) + `deploy-app.sh` with
+  automatic rollback; used by `up.sh`, the API's redeploy, and (intended) the CI pipeline.
+- `docs/cost.md`: hourly/monthly estimate for the report (rates to be checked in the Pricing Calculator).
+- `README.md`, `.gitignore` (ignores `.env*` except `.env.example`, Terraform state, `*.tfvars`,
+  `infra/backend.hcl`), `.gitattributes` (LF for `*.sh` and Dockerfiles), `.dockerignore` (repo-root builds).
 
-Not yet pushed by anyone: `infra/`, `.github/workflows/`, `docs/` guides.
+Not yet pushed by anyone: `.github/workflows/` (Jason's pipeline).
 
-Not yet verified: the EKS path (`rebound-data.sh`, `api/k8s/api.yaml`) has only been checked offline (templates
-rendered and parsed, helpers unit-checked); the API's `PgStore` and Docker image haven't run yet; the latest
-`demo-local.sh` (with provision + isolation) hasn't run. All need Docker or a cluster session.
+Not yet verified: no Terraform `init/validate/apply` yet (needs provider/module downloads, then AWS). The EKS
+path (`rebound-data.sh`, `api/k8s/api.yaml`, `deploy/app.yaml`) is checked offline only (rendered, parsed,
+helpers unit-checked). Docker images, the API's `PgStore`, and the latest `demo-local.sh` haven't run yet.
 
 ## How it gets deployed (the short version)
 
