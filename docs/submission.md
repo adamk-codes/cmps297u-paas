@@ -54,5 +54,6 @@ capture them every session:
 - `kubectl get nodes,pods -A`, ALB in the console, ECR repo with tags, RDS instance, S3 backup objects (with
   KMS encryption shown), Secrets Manager entries, Cognito pool, CloudTrail events, Budgets alert.
 - Backup/restore: `BACKUP_RESULT` / `RESTORE_RESULT` lines (size, row counts, `durationSeconds`), recovery URL page.
-- HPA during the load test (`kubectl get hpa -w`), pod counts and timing.
+- HPA during the load test: `loadtest/run.sh --scale-down` records pods and CPU every 5 s (`hpa.csv`) and prints
+  `LOADTEST_RESULT` (p95 before vs. under load, time to scale out and back). Also screenshot `kubectl get hpa -w`.
 - Cost Explorer for actual spend.

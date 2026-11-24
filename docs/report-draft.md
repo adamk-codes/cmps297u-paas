@@ -56,7 +56,7 @@ notes-app; backups up to tens of MB.
 run as separate Jobs, so they never compete with request handling inside the app; restores are serialized (one
 at a time) to protect the shared database.
 
-**Evidence:** load test with **[TODO: tool, e.g. `hey`/k6, rate, duration]**: pods went from 1 to **[TODO]** in
+**Evidence:** load test with **k6** (`loadtest/run.sh`: 30 s baseline at 2 users, then ramp to **[TODO: 40]** users held **[TODO: 3 min]**, requests back to back, mix of home page / notes API / stats; **[TODO]** req/s): pods went from 1 to **[TODO]** in
 **[TODO] s**; p95 latency **[TODO] ms** before vs **[TODO] ms** at peak (screenshot of `kubectl get hpa -w`).
 Recovery: restoring **120 rows ([TODO] KB dump)** took **[TODO] s** for the restore Job and **[TODO] s** end to
 end until the recovery URL was verified (`RECOVERY_RESULT`). Locally (docker-compose) the restore Job took 2 s
