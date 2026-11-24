@@ -41,6 +41,17 @@ export function loadConfig(env = process.env) {
     adminDatabaseUrl: env.ADMIN_DATABASE_URL || undefined,
     // Public URL of a recovery app; {app} is replaced. On EKS the runner reports the real ALB URL.
     recoveryUrlTemplate: env.RECOVERY_URL_TEMPLATE || 'http://localhost:3001/apps/{app}-recovery/',
+
+    // Apps (read from Kubernetes in kubernetes mode)
+    namespace: env.NAMESPACE || 'apps',
+    publicUrl: (env.PUBLIC_URL || env.ALB_URL || 'http://localhost:3000').replace(/\/$/, ''),
+    postgresVersion: env.POSTGRES_VERSION || '16',
+    ecrRegistry: env.ECR_REGISTRY || '',
+    deployScript: env.DEPLOY_SCRIPT || fileURLToPath(new URL('../../deploy/deploy-app.sh', import.meta.url)),
+    // [{ "fullName": "github.com/org/notes-app", "defaultBranch": "main", "runtime": "Node.js 20" }]
+    approvedRepos: Array.isArray(parseJson(env.APPROVED_REPOS, 'APPROVED_REPOS'))
+      ? parseJson(env.APPROVED_REPOS, 'APPROVED_REPOS')
+      : [],
     operationTimeoutMs: Number.parseInt(env.OPERATION_TIMEOUT_SECONDS || '1500', 10) * 1000,
   }
 }

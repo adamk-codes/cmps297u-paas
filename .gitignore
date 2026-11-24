@@ -29,3 +29,7 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated per session by infra/scripts/up.sh
+infra/backend.hcl
+.terraform.lock.hcl.bak

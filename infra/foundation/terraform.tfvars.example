@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (git-ignored).
+region              = "us-east-1"
+team_emails         = ["member1@example.com", "member2@example.com"]
+budget_limit_usd    = 40
+budget_alert_emails = ["member1@example.com"]
+github_repository   = "adamk-codes/cmps297u-paas"
+# Set by infra/scripts/up.sh each session; leave empty otherwise.
+alb_dns_name = ""

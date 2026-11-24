@@ -23,6 +23,13 @@ export function createExecutor(config, run = runScript) {
     const runner = path.join(config.jobsDir, 'k8s', 'rebound-data.sh')
     return {
       mode: 'kubernetes',
+      async redeploy({ appId, imageTag, onStep }) {
+        if (!config.ecrRegistry) return { ok: false, error: 'ECR_REGISTRY is not set', logTail: [] }
+        const image = `${config.ecrRegistry}/${appId}:${imageTag}`
+        const res = await run({ command: 'bash', args: [config.deployScript, appId, image], env: {}, timeoutMs, onStep })
+        const r = res.results.DEPLOY_RESULT
+        return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'rollout failed; previous image restored')
+      },
       async backup({ appId, onStep }) {
         const res = await run({ command: 'bash', args: [runner, 'backup', appId], env: s3Env(), timeoutMs, onStep })
         const r = res.results.BACKUP_RESULT
@@ -56,6 +63,9 @@ export function createExecutor(config, run = runScript) {
 
   return {
     mode: 'process',
+    async redeploy() {
+      return { ok: false, error: 'redeploys run on the cluster (EXECUTOR=kubernetes)', logTail: [] }
+    },
     async backup({ appId, onStep }) {
       const app = config.localApps[appId]
       if (!app?.databaseUrl) return { ok: false, error: `no LOCAL_APPS entry with databaseUrl for ${appId}`, logTail: [] }

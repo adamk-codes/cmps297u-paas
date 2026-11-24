@@ -8,8 +8,12 @@ import { HttpError } from './operations.js'
 //   restore(backupId)     POST /api/backups/:backupId/restore    -> 202 Operation (409 if one is running)
 //   listRestores()        GET  /api/restores
 //   getOperation(id)      GET  /api/operations/:id
-// Deploy/app endpoints (listApps, deploy, redeploy, getLogs, ...) belong to the deploy side of the API.
-export function createApp({ operations, config, verifier }) {
+//   listApps / getApp     GET  /api/apps, /api/apps/:appId        (from Kubernetes)
+//   getLogs(appId)        GET  /api/apps/:appId/logs
+//   redeploy(appId, tag)  POST /api/apps/:appId/redeploy {imageTag} -> 202 Operation
+//   listApprovedRepos()   GET  /api/repos
+//   deploy(req)           POST /api/apps -> 501 (new apps go through the CI pipeline)
+export function createApp({ operations, apps, config, verifier }) {
   const app = express()
   app.disable('x-powered-by')
   app.set('trust proxy', true)
@@ -36,6 +40,52 @@ export function createApp({ operations, config, verifier }) {
   // Everything else under /api requires a signed-in team member (when Cognito is configured).
   const auth = createAuth(config.auth, verifier)
   if (auth) app.use('/api', auth)
+
+  // ---- apps (read from the cluster) ----
+  const withLastBackup = async (list) => {
+    const backups = await operations.catalog.list().catch(() => [])
+    const last = new Map()
+    for (const b of backups) if (!last.has(b.appId)) last.set(b.appId, b.createdAt) // newest first
+    return list.map((a) => (last.has(a.id) ? { ...a, lastBackupAt: last.get(a.id) } : a))
+  }
+  const findApp = async (id) => {
+    const app = (await apps.list()).find((a) => a.id === id)
+    if (!app) throw new HttpError(404, `app ${id} was not found`)
+    return app
+  }
+
+  app.get('/api/apps', wrap(async (_req, res) => {
+    res.json(await withLastBackup(await apps.list()))
+  }))
+
+  app.get('/api/apps/:appId', wrap(async (req, res) => {
+    res.json((await withLastBackup([await findApp(req.params.appId)]))[0])
+  }))
+
+  app.get('/api/apps/:appId/logs', wrap(async (req, res) => {
+    await findApp(req.params.appId)
+    res.json(await apps.logs(req.params.appId))
+  }))
+
+  // Redeploy an image this app has run before (rollback / roll forward).
+  app.post('/api/apps/:appId/redeploy', wrap(async (req, res) => {
+    const target = await findApp(req.params.appId)
+    const tag = req.body?.imageTag
+    if (!target.history.some((h) => h.tag === tag)) {
+      throw new HttpError(400, `image ${tag} is not in ${target.id}'s history`)
+    }
+    const op = await operations.startRedeploy(target.id, tag, { idempotencyKey: idem(req) })
+    res.status(202).location(`/api/operations/${op.id}`).json(op)
+  }))
+
+  app.get('/api/repos', (_req, res) => res.json(config.approvedRepos))
+
+  // New apps are built by the CI pipeline (test -> build -> scan -> push), not by the API.
+  app.post('/api/apps', (_req, res) => {
+    res.status(501).json({ error: 'New deployments run through the GitHub Actions pipeline; push to main to deploy.' })
+  })
+
+  // ---- backups and restores ----
 
   app.get('/api/backups', wrap(async (req, res) => {
     res.json(await operations.listBackups(req.query.appId || undefined))

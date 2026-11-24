@@ -49,6 +49,9 @@ rules:
   - apiGroups: [networking.k8s.io]
     resources: [ingresses]
     verbs: [get, list, create, patch, update]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers] # a redeploy re-applies the app's HPA
+    verbs: [get, create, patch, update]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -101,6 +104,9 @@ spec:
             - { name: MIN_ROWS, value: "${MIN_ROWS}" }
             - { name: COGNITO_USER_POOL_ID, value: "${COGNITO_USER_POOL_ID}" }
             - { name: COGNITO_CLIENT_ID, value: "${COGNITO_CLIENT_ID}" }
+            - { name: PUBLIC_URL, value: "${DASHBOARD_ORIGIN}" }
+            - name: APPROVED_REPOS
+              value: '[{"fullName":"github.com/adamk-codes/cmps297u-paas","defaultBranch":"main","runtime":"Node.js 20"}]'
             - { name: CORS_ORIGINS, value: "${DASHBOARD_ORIGIN}" }
             - name: PLATFORM_DATABASE_URL
               valueFrom: { secretKeyRef: { name: rebound-platform-db, key: DATABASE_URL } }

@@ -66,6 +66,23 @@ export class Operations {
     return op
   }
 
+  // Roll an app back (or forward) to an image it has run before. The caller checks the tag is in the
+  // app's history; one rollout per app at a time.
+  async startRedeploy(appId, imageTag, { idempotencyKey } = {}) {
+    if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(imageTag ?? '')) throw new HttpError(400, 'invalid image tag')
+    const existing = await this.replay(idempotencyKey)
+    if (existing) return existing
+    const running = await this.store.list({ kind: 'redeploy', appId, status: 'running', limit: 1 })
+    if (running.length) throw new HttpError(409, `a rollout of ${appId} is already running`, { operationId: running[0].id })
+
+    const op = await this.create('redeploy', appId, { idempotencyKey })
+    this.track(op, (onStep) => this.executor.redeploy({ appId, imageTag, onStep }), (r) => ({
+      detail: { image: r.image, imageTag: r.imageTag },
+    }))
+    return op
+  }
+
   async get(id) {
     const op = await this.store.get(id)
     if (!op) throw new HttpError(404, `operation ${id} was not found`)

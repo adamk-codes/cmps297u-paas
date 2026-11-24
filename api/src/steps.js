@@ -9,6 +9,10 @@ export const STEP_TEMPLATES = {
     { key: 'run', label: 'Run', description: 'Matching image at a recovery URL' },
     { key: 'check', label: 'Check', description: 'Records verified, recovery time measured' },
   ],
+  redeploy: [
+    { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR' },
+    { key: 'release', label: 'Release', description: 'Rolled out on EKS' },
+  ],
 }
 
 // Script log step names -> dashboard step keys.
@@ -17,6 +21,7 @@ export const STEP_TEMPLATES = {
 const STEP_ALIASES = {
   backup: { dump: 'dump', store: 'store' },
   restore: { download: 'restore', restore: 'restore', run: 'run', check: 'check' },
+  redeploy: { pull: 'pull', release: 'release' },
 }
 
 export function stepKeyFor(kind, logStep) {

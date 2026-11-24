@@ -1,0 +1,117 @@
+# Generic Rebound app: Deployment + Service + Ingress (path /apps/<app> on the shared ALB) + HPA.
+# Rendered by deploy/deploy-app.sh (or the CI pipeline) with envsubst:
+#   APP_NAME, APP_IMAGE, IMAGE_TAG, NAMESPACE, ALB_GROUP, MIN_REPLICAS, MAX_REPLICAS, CPU_TARGET,
+#   APP_REPO, APP_DESCRIPTION, APP_ICON (display metadata for the dashboard)
+# The app reads DATABASE_URL from Secret <app>-db (created by `rebound-data.sh provision <app>`).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAMESPACE}
+  labels: &labels
+    app.kubernetes.io/name: ${APP_NAME}
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: app
+    rebound.io/app: ${APP_NAME}
+  annotations:
+    rebound.io/image-tag: "${IMAGE_TAG}"
+    rebound.io/repo: "${APP_REPO}"
+    rebound.io/description: "${APP_DESCRIPTION}"
+    rebound.io/icon: "${APP_ICON}"
+    rebound.io/runtime: "Node.js 20"
+spec:
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels: { app.kubernetes.io/name: "${APP_NAME}" }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } # zero-downtime rollout; a bad image never replaces a good pod
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector: { matchLabels: { app.kubernetes.io/name: "${APP_NAME}" } }
+      containers:
+        - name: app
+          image: ${APP_IMAGE}
+          ports: [{ name: http, containerPort: 3000 }]
+          env:
+            - { name: BASE_PATH, value: "/apps/${APP_NAME}" }
+            - { name: APP_NAME, value: "${APP_NAME}" }
+            - { name: IMAGE_TAG, value: "${IMAGE_TAG}" }
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: "${APP_NAME}-db", key: DATABASE_URL } }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 4
+          resources:
+            requests: { cpu: 100m, memory: 128Mi } # HPA percentages are relative to the CPU request
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, rebound.io/kind: app, rebound.io/app: "${APP_NAME}" }
+spec:
+  selector: { app.kubernetes.io/name: "${APP_NAME}" }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, rebound.io/kind: app, rebound.io/app: "${APP_NAME}" }
+  annotations:
+    alb.ingress.kubernetes.io/group.name: ${ALB_GROUP}
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /apps/${APP_NAME}/healthz
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "10"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /apps/${APP_NAME}
+            pathType: Prefix
+            backend:
+              service: { name: "${APP_NAME}", port: { name: http } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, rebound.io/app: "${APP_NAME}" }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: "${APP_NAME}" }
+  minReplicas: ${MIN_REPLICAS}
+  maxReplicas: ${MAX_REPLICAS}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: ${CPU_TARGET} }
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies: [{ type: Pods, value: 2, periodSeconds: 15 }]
+    scaleDown:
+      stabilizationWindowSeconds: 120

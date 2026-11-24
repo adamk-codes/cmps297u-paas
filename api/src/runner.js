@@ -1,5 +1,25 @@
 import { spawn } from 'node:child_process'
 
+// Runs a short command and captures its output (e.g. kubectl ... -o json).
+export function runCapture(command, args, { env = {}, timeoutMs = 30_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8').on('data', (d) => (stdout += d))
+    child.stderr.setEncoding('utf8').on('data', (d) => (stderr += d))
+    const timer = setTimeout(() => child.kill('SIGTERM'), timeoutMs)
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve({ code: code ?? 1, stdout, stderr })
+    })
+  })
+}
+
 const RESULT_LINE = /^([A-Z]+_RESULT) (\{.*\})\s*$/
 const STEP_LINE = /(?:\[([a-z-]+)\]|::step ([a-z-]+))/
 
