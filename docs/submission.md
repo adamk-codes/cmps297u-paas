@@ -28,6 +28,14 @@ demo recommended. **Every member presents and must be able to answer questions a
 
 Group score (80) is shared; Q&A (20) is individual.
 
+## Drafts
+
+- Report: [report-draft.md](report-draft.md), following the template; every **[TODO]** is a number to measure in a session.
+- Poster: [poster/Rebound_Poster_Draft.pptx](poster/Rebound_Poster_Draft.pptx) (preview: [PNG](poster/Rebound_Poster_Draft.png)),
+  filled from the course template by `poster/fill_template.py` (edit the text there and re-run, or edit in PowerPoint).
+  Still to add: the live CloudFront URL + QR code, AWS icons in the diagram if wanted, measured numbers.
+- Cost: [cost.md](cost.md).
+
 ## Report sections (template)
 
 1. Abstract and project goal (one-sentence goal, 100–150-word abstract)
