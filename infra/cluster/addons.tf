@@ -22,7 +22,7 @@ resource "helm_release" "alb_controller" {
   namespace  = "kube-system"
   repository = "https://aws.github.io/eks-charts"
   chart      = "aws-load-balancer-controller"
-  version    = "~> 1.14"
+  version    = "~> 1.14.1"
 
   values = [yamlencode({
     clusterName  = module.eks.cluster_name
@@ -44,7 +44,7 @@ resource "helm_release" "metrics_server" {
   namespace  = "kube-system"
   repository = "https://kubernetes-sigs.github.io/metrics-server/"
   chart      = "metrics-server"
-  version    = "~> 3.12"
+  version    = "~> 3.12.2"
 
   depends_on = [module.eks]
 }
