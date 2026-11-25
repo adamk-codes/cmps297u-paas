@@ -1,5 +1,6 @@
 # Production image for notes-app. Built by CI (test -> build -> scan -> push to ECR).
-FROM node:20-alpine
+FROM node:24-alpine
+RUN apk upgrade --no-cache
 
 ENV NODE_ENV=production \
     PORT=3000
