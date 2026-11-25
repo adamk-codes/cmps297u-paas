@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { advanceSteps, finishSteps, initialSteps, stepKeyFor } from './steps.js'
+import { failedOperation, runOperation } from './run-operation.js'
+import { initialSteps } from './steps.js'
 
 export class HttpError extends Error {
   constructor(status, message, extra = {}) {
@@ -11,76 +12,42 @@ export class HttpError extends Error {
 
 const APP_ID = /^[a-z0-9][a-z0-9-]{0,40}$/
 
-// Starts backups and restores as background operations and records their progress.
-// Guarantees from the proposal:
-//   - unique operation ids, and an Idempotency-Key header makes a repeated request return the same operation
-//   - one restore at a time (across all apps); one backup at a time per app
-//   - steps move forward only, and a failed operation keeps the step where it failed
+function validateKey(key) {
+  if (key && !/^[A-Za-z0-9._:-]{8,128}$/.test(key)) throw new HttpError(400, 'invalid Idempotency-Key')
+}
+
 export class Operations {
-  constructor({ store, executor, catalog, now = () => new Date(), log = console }) {
+  constructor({ store, executor, catalog, queue, now = () => new Date(), log = console }) {
     this.store = store
     this.executor = executor
     this.catalog = catalog
+    this.queue = queue
     this.now = now
     this.log = log
-    this.inFlight = new Set() // promises, so tests/shutdown can wait for background work
+    this.inFlight = new Set()
   }
 
   async startBackup(appId, { idempotencyKey } = {}) {
     if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
-    const existing = await this.replay(idempotencyKey)
-    if (existing) return existing
-    const running = await this.store.list({ kind: 'backup', appId, status: 'running', limit: 1 })
-    if (running.length) return running[0] // a second click joins the backup already in progress
-
-    const op = await this.create('backup', appId, { idempotencyKey })
-    this.track(op, (onStep) => this.executor.backup({ appId, onStep }), (r) => ({
-      detail: { s3Key: r.s3Key, sizeBytes: r.sizeBytes, imageTag: r.imageTag, rowCount: r.rowCount },
-    }))
-    return op
+    return this.start('backup', appId, { idempotencyKey })
   }
 
   async startRestore(backupId, { idempotencyKey } = {}) {
-    const existing = await this.replay(idempotencyKey)
-    if (existing) return existing
+    // An idempotent replay still works if the original backup has since expired.
+    validateKey(idempotencyKey)
+    if (idempotencyKey) {
+      const existing = await this.store.findByIdempotencyKey(idempotencyKey)
+      if (existing) return existing
+    }
     const backup = await this.catalog.get(backupId)
     if (!backup) throw new HttpError(404, `backup ${backupId} was not found`)
-    const running = await this.store.list({ kind: 'restore', status: 'running', limit: 1 })
-    if (running.length) {
-      throw new HttpError(409, 'A restore is already running. Restores run one at a time.', {
-        operationId: running[0].id,
-      })
-    }
-
-    const op = await this.create('restore', backup.appId, { idempotencyKey, backupId })
-    this.track(op, (onStep) => this.executor.restore({ appId: backup.appId, backup, onStep }), (r) => ({
-      result: {
-        backupId,
-        targetDatabase: r.targetDatabase,
-        recoveryUrl: r.recoveryUrl,
-        recordsChecked: r.recordsChecked,
-        durationSeconds: r.durationSeconds,
-      },
-      detail: { restoreSeconds: r.restoreSeconds, image: r.image, backupKey: backup.s3Key },
-    }))
-    return op
+    return this.start('restore', backup.appId, { idempotencyKey, backupId }, backup)
   }
 
-  // Roll an app back (or forward) to an image it has run before. The caller checks the tag is in the
-  // app's history; one rollout per app at a time.
   async startRedeploy(appId, imageTag, { idempotencyKey } = {}) {
     if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
     if (!/^[A-Za-z0-9._-]{1,128}$/.test(imageTag ?? '')) throw new HttpError(400, 'invalid image tag')
-    const existing = await this.replay(idempotencyKey)
-    if (existing) return existing
-    const running = await this.store.list({ kind: 'redeploy', appId, status: 'running', limit: 1 })
-    if (running.length) throw new HttpError(409, `a rollout of ${appId} is already running`, { operationId: running[0].id })
-
-    const op = await this.create('redeploy', appId, { idempotencyKey })
-    this.track(op, (onStep) => this.executor.redeploy({ appId, imageTag, onStep }), (r) => ({
-      detail: { image: r.image, imageTag: r.imageTag },
-    }))
-    return op
+    return this.start('redeploy', appId, { idempotencyKey, imageTag })
   }
 
   async get(id) {
@@ -89,66 +56,36 @@ export class Operations {
     return op
   }
 
-  async replay(idempotencyKey) {
-    if (!idempotencyKey) return null
-    if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) throw new HttpError(400, 'invalid Idempotency-Key')
-    return this.store.findByIdempotencyKey(idempotencyKey)
-  }
-
-  async create(kind, appId, { idempotencyKey, backupId } = {}) {
+  async start(kind, appId, { idempotencyKey, backupId, imageTag }, backup) {
+    validateKey(idempotencyKey)
     const op = {
-      id: `op-${randomUUID()}`,
-      kind,
-      appId,
-      status: 'running',
-      steps: initialSteps(kind),
-      startedAt: this.now().toISOString(),
-      ...(backupId && { backupId }),
-      ...(idempotencyKey && { idempotencyKey }),
+      id: `op-${randomUUID()}`, kind, appId, status: 'running',
+      steps: initialSteps(kind), startedAt: this.now().toISOString(),
+      ...(backupId && { backupId }), ...(idempotencyKey && { idempotencyKey }),
     }
-    try {
-      await this.store.create(op)
-    } catch (err) {
-      // Two identical requests raced; return the one that won.
-      if (err.code === 'DUPLICATE') return this.store.findByIdempotencyKey(idempotencyKey)
-      throw err
+    const message = { operationId: op.id, kind, appId, ...(backupId && { backupId }), ...(imageTag && { imageTag }) }
+    const saved = await this.store.create(op, this.queue ? message : undefined)
+    if (saved.id !== op.id) {
+      if ((idempotencyKey && saved.idempotencyKey === idempotencyKey) || kind === 'backup') return saved
+      const reason = kind === 'restore' ? 'A restore is already running. Restores run one at a time.'
+        : `a rollout of ${appId} is already running`
+      throw new HttpError(409, reason, { operationId: saved.id })
+    }
+
+    if (this.queue) {
+      try {
+        await this.queue.send(message)
+      } catch (err) {
+        return this.store.update(op.id, failedOperation(op.steps, `Could not enqueue ${kind}: ${err.message}`, this.now()))
+      }
+      // SQS accepted the work. If bookkeeping fails, an extra delivery can be safely acknowledged later.
+      await this.store.markDispatched(op.id).catch((err) => this.log.error(err))
+    } else {
+      const done = runOperation(op, message, this, { backup }).catch((err) => this.log.error(err))
+      this.inFlight.add(done)
+      done.finally(() => this.inFlight.delete(done))
     }
     return op
-  }
-
-  track(op, work, onSuccess) {
-    let steps = op.steps
-    let pending = Promise.resolve()
-    const save = (patch) => {
-      pending = pending.then(() => this.store.update(op.id, patch)).catch((e) => this.log.error(e))
-      return pending
-    }
-    const onStep = (logStep) => {
-      const key = stepKeyFor(op.kind, logStep)
-      if (!key) return
-      const next = advanceSteps(steps, key)
-      if (next !== steps) {
-        steps = next
-        save({ steps })
-      }
-    }
-    const done = (async () => {
-      let outcome
-      try {
-        outcome = await work(onStep)
-      } catch (err) {
-        outcome = { ok: false, error: err.message }
-      }
-      const finishedAt = this.now().toISOString()
-      if (outcome.ok) {
-        await save({ status: 'succeeded', steps: finishSteps(steps, true), finishedAt, ...onSuccess(outcome.result) })
-      } else {
-        this.log.error(`operation ${op.id} (${op.kind} ${op.appId}) failed: ${outcome.error}`)
-        await save({ status: 'failed', steps: finishSteps(steps, false), finishedAt, error: outcome.error })
-      }
-    })()
-    this.inFlight.add(done)
-    done.finally(() => this.inFlight.delete(done))
   }
 
   async idle() {

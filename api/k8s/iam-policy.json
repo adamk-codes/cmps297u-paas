@@ -2,6 +2,15 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "OperationsQueue",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage",
+        "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"
+      ],
+      "Resource": "OPERATIONS_QUEUE_ARN"
+    },
+    {
       "Sid": "ListBackups",
       "Effect": "Allow",
       "Action": "s3:ListBucket",

@@ -1,22 +1,16 @@
 import { createApp } from './app.js'
 import { createAppsSource } from './apps.js'
 import { createCostService } from './costs.js'
-import { S3Catalog } from './catalog.js'
 import { loadConfig } from './config.js'
-import { createExecutor } from './executor.js'
+import { openOperationRuntime } from './operation-runtime.js'
 import { Operations } from './operations.js'
-import { MemoryStore, PgStore } from './store.js'
 
 const config = loadConfig()
-const store = config.platformDatabaseUrl ? new PgStore(config.platformDatabaseUrl) : new MemoryStore()
-await store.init()
+const runtime = await openOperationRuntime(config)
+const { store } = runtime
 if (!config.platformDatabaseUrl) console.warn('PLATFORM_DATABASE_URL not set: operation history is kept in memory')
 
-const operations = new Operations({
-  store,
-  executor: createExecutor(config),
-  catalog: new S3Catalog(config.s3),
-})
+const operations = new Operations(runtime)
 if (!config.auth.userPoolId) console.warn('COGNITO_USER_POOL_ID not set: API is open (local dev only)')
 const app = createApp({ operations, apps: createAppsSource(config), costs: createCostService(config), config })
 const server = app.listen(config.port, () => {

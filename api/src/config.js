@@ -23,6 +23,7 @@ export function loadConfig(env = process.env) {
 
     // Where operation history lives. Unset = in memory (lost on restart; fine for local dev and tests).
     platformDatabaseUrl: env.PLATFORM_DATABASE_URL || undefined,
+    queueUrl: env.QUEUE_URL || undefined,
 
     s3: {
       bucket: env.S3_BUCKET || 'rebound-backups',
