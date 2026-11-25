@@ -19,7 +19,7 @@ Target design as of 2026-11-24. The proposal's version differs in a few places; 
  │    /apps/<name>             → app Deployment                               │
  │    /apps/<name>-recovery    → recovery Deployment (restored DB)            │
  │                                                                            │
- │  EKS cluster, managed node group 2 × t3.medium                             │
+ │  EKS cluster, managed node group 2 × c7i-flex.large                        │
  │    - platform API (deploy / backup / restore endpoints, operation history) │
  │    - app Deployments + HPA (metrics-server)                                │
  │    - backup / restore Kubernetes Jobs                                      │

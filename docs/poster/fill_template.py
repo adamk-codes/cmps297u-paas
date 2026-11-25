@@ -19,8 +19,8 @@ SLOT = {
     "outcome-prompt": "Each backup is tied to its app version; each restore is checked at a separate URL before anyone relies on it.",
     "user-flow-prompt": "Deploy → back up → lose data → restore → verify",
     # design choices
-    "design-row-1-left": "EKS on 2 × t3.medium",
-    "design-row-1-right": "Runs the API, the apps (scaled by HPA) and backup/restore Jobs. Managed nodes instead of Fargate: simpler controller setup, fixed hourly cost.",
+    "design-row-1-left": "EKS, 2 managed nodes",
+    "design-row-1-right": "Runs the API, the apps (scaled by HPA) and backup/restore Jobs. 2 × c7i-flex.large instead of Fargate: simpler controller setup, fixed hourly cost.",
     "design-row-2-left": "RDS + pg_dump in S3",
     "design-row-2-right": "One database and login per app on one shared instance. A dump file restores one app in seconds; changes after the backup are lost.",
     "design-row-3-left": "CloudFront + one ALB",
@@ -48,9 +48,9 @@ SLOT = {
     "architecture-checklist-4": "Restore: Job → NEW database → same image at /apps/<app>-recovery → rows and time checked",
     "architecture-checklist-note": "Only one restore runs at a time; a repeated request never starts the same job twice.",
     # cost
-    "cost-estimate": "~ $26 / month",
+    "cost-estimate": "~ $33 / month",
     "cost-assumptions-prompt": "us-east-1 on-demand; cluster up 80 h/month, foundation always on",
-    "cost-drivers-prompt": "EKS control plane and nodes (~60% of $0.30/h), then NAT and ALB. Left on 24/7: ~ $222/month.",
+    "cost-drivers-prompt": "EKS control plane and nodes (~70% of $0.38/h), then NAT and ALB. Left on 24/7: ~ $283/month.",
     # scalability
     "scale-load-prompt": "4 team members, 2 Node.js apps, 100+ rows each; a load test pushes notes-app past its CPU target.",
     "scale-design-prompt": "HPA adds pods (1 → 5) at 60% CPU; one ALB spreads traffic; backups and restores run as separate Jobs.",

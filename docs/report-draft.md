@@ -32,7 +32,7 @@ Release path: GitHub Actions (OIDC) → ECR → EKS. Two Terraform stacks: *foun
 
 | AWS service | Role in the system | Selection or configuration rationale |
 | --- | --- | --- |
-| Amazon EKS (2 × t3.medium) | Runs the API, the apps (with HPA), recovery apps, and backup/restore **Jobs** | Jobs, CronJobs and autoscaling are native; managed nodes instead of Fargate (proposal) for the load balancer controller and short Jobs |
+| Amazon EKS 1.35 (2 × c7i-flex.large) | Runs the API, the apps (with HPA), recovery apps, and backup/restore **Jobs** | Jobs, CronJobs and autoscaling are native; managed nodes instead of Fargate (proposal) for the load balancer controller and short Jobs |
 | Elastic Load Balancing (ALB) | One shared ALB, path routing `/apps/<name>`, `/api` | One IngressGroup for all apps instead of one ALB per app |
 | Amazon CloudFront | One stable HTTPS URL for the dashboard, API and apps | HTTPS without buying a domain; same origin (no CORS); survives session teardown |
 | Amazon RDS for PostgreSQL | One database + restricted login per app, plus a platform database | Single-AZ db.t4g.micro; recovery is from our own backups |
@@ -74,16 +74,16 @@ during work sessions (80 h total); foundation always on. Details in `docs/cost.m
 | AWS service | Monthly usage and calculation | Estimated cost |
 | --- | --- | --- |
 | EKS control plane | 80 h × $0.10 | $8.00 |
-| EC2 (2 × t3.medium) | 80 h × 2 × $0.0416 | $6.66 |
+| EC2 (2 × c7i-flex.large) | 80 h × 2 × $0.0848 | $13.57 |
 | NAT gateway | 80 h × $0.045 (+ data) | $3.60 |
 | ALB | 80 h × ~$0.031 | $2.44 |
 | RDS db.t4g.micro + 20 GB | 80 h × $0.016 + storage (prorated) | $1.40 |
 | Public IPv4 (3) | 80 h × 3 × $0.005 | $1.20 |
 | KMS, Secrets Manager, S3, ECR, CloudFront, Cognito | 1 key, ~4 secrets, < 5 GB; free tiers | ~$3.00 |
-| **Total** | | **≈ $26 for the project** (vs. $41 proposed); ≈ $222/month if left on 24/7 |
+| **Total** | | **≈ $33 for the project** (vs. $41 proposed); ≈ $283/month if left on 24/7 |
 
 **Actual spend:** **[TODO: Cost Explorer total]** (dashboard Costs page, usage before credits). Main drivers: EKS
-control plane and nodes (~60% of the hourly cost). Savings: one NAT instead of two, one shared ALB, one RDS
+control plane and nodes (~70% of the hourly cost). Savings: one NAT instead of two, one shared ALB, one RDS
 instance, destroy-after-session.
 
 ### 4.3 Security
