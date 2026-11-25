@@ -1,0 +1,50 @@
+# One k6 run as a Kubernetes Job; rendered by loadtest/run.sh with envsubst:
+#   JOB_NAME, NAMESPACE, APP_NAME, TARGET_URL, VUS, RAMP, HOLD, BASELINE, K6_IMAGE
+# The script comes from ConfigMap ${JOB_NAME} (created by run.sh from loadtest/script.js).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${NAMESPACE}
+  labels: { app.kubernetes.io/part-of: rebound, rebound.io/kind: loadtest, rebound.io/app: "${APP_NAME}" }
+spec:
+  backoffLimit: 0 # one run = one measurement; never retry silently
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: { app.kubernetes.io/part-of: rebound, rebound.io/kind: loadtest }
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, runAsUser: 12345, seccompProfile: { type: RuntimeDefault } }
+      affinity:
+        # Prefer a node without app pods, so the load generator doesn't steal the CPU being measured.
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector: { matchLabels: { app.kubernetes.io/name: "${APP_NAME}" } }
+      containers:
+        - name: k6
+          image: ${K6_IMAGE}
+          args: ["run", "--quiet", "/scripts/script.js"]
+          env:
+            - { name: TARGET_URL, value: "${TARGET_URL}" }
+            - { name: VUS, value: "${VUS}" }
+            - { name: RAMP, value: "${RAMP}" }
+            - { name: HOLD, value: "${HOLD}" }
+            - { name: BASELINE, value: "${BASELINE}" }
+            - { name: K6_NO_USAGE_REPORT, value: "true" }
+          resources:
+            requests: { cpu: 500m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          volumeMounts:
+            - { name: script, mountPath: /scripts, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: script
+          configMap: { name: "${JOB_NAME}" }
+        - name: tmp
+          emptyDir: {}

@@ -16,6 +16,7 @@ deployment, gets an application URL, and can back up and restore its data — al
 | `api/` | Platform API (Node + Express): backups, restores, operations done; deploy endpoints next | Abdulrahman (data) / Jason (deploy) |
 | `infra/` | Terraform: `foundation/` (KMS, S3, ECR, Cognito, CloudFront, CI role, budgets, CloudTrail) and `cluster/` (VPC, EKS, ALB controller, RDS, IRSA); `scripts/up.sh`, `down.sh` | Ahmad (drafted by Abdulrahman) |
 | `deploy/` | Generic app template (Deployment, Service, Ingress, HPA) and `deploy-app.sh` | Jason / Abdulrahman |
+| `loadtest/` | k6 load test as a Kubernetes Job + `run.sh`, which records the HPA scale-out (scalability evidence) | Jason (drafted by Abdulrahman) |
 | `.github/workflows/` | CI/CD: test, build, scan, push to ECR, release | Jason |
 | `docs/` | Architecture, decisions, submission checklist, cost estimate; later the guides | Adam / all |
 
