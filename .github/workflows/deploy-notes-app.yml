@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - "sample-apps/notes-app/**"
+      - ".github/workflows/deploy-notes-app.yml"
   workflow_dispatch:
 
 permissions:
