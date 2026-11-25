@@ -26,7 +26,7 @@ spec:
         rebound.io/restored-database: "${TARGET_DB}"
     spec:
       automountServiceAccountToken: false
-      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: app
           image: ${APP_IMAGE}
