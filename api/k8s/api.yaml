@@ -85,7 +85,7 @@ spec:
       labels: { app.kubernetes.io/part-of: rebound, app.kubernetes.io/name: rebound-api }
     spec:
       serviceAccountName: rebound-api
-      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, seccompProfile: { type: RuntimeDefault } }
       containers:
         - name: api
           image: ${API_IMAGE}
