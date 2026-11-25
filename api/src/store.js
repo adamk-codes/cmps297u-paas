@@ -7,14 +7,29 @@ import pg from 'pg'
 export class MemoryStore {
   constructor() {
     this.ops = new Map()
+    this.unsent = new Map()
   }
   async init() {}
-  async create(op) {
-    if (op.idempotencyKey && (await this.findByIdempotencyKey(op.idempotencyKey))) {
-      throw Object.assign(new Error('duplicate idempotency key'), { code: 'DUPLICATE' })
+  async create(op, message) {
+    const all = [...this.ops.values()]
+    const replay = op.idempotencyKey && all.find((o) => o.idempotencyKey === op.idempotencyKey)
+    const running = all.find((o) => o.status === 'running' && o.kind === op.kind &&
+      (op.kind === 'restore' || o.appId === op.appId))
+    if (replay || running) return structuredClone(replay || running)
+    if (message) {
+      this.unsent.set(op.id, structuredClone(message))
     }
     this.ops.set(op.id, structuredClone(op))
     return op
+  }
+  async pendingMessages(before) {
+    return [...this.unsent.values()].filter(({ operationId }) => {
+      const op = this.ops.get(operationId)
+      return op.status === 'running' && new Date(op.startedAt) < before
+    }).slice(0, 10)
+  }
+  async markDispatched(id) {
+    this.unsent.delete(id)
   }
   async update(id, patch) {
     const op = this.ops.get(id)
@@ -52,8 +67,9 @@ export class PgStore {
     })
   }
 
-  async init() {
+  async init({ recoverLocal = true } = {}) {
     await this.pool.query(`
+      SELECT pg_advisory_xact_lock(hashtext('rebound:operation-schema'));
       CREATE TABLE IF NOT EXISTS operations (
         id              TEXT PRIMARY KEY,
         kind            TEXT NOT NULL,
@@ -68,13 +84,17 @@ export class PgStore {
         detail          JSONB,
         idempotency_key TEXT UNIQUE
       );
+      ALTER TABLE operations ADD COLUMN IF NOT EXISTS queue_message JSONB;
+      ALTER TABLE operations ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
       CREATE INDEX IF NOT EXISTS operations_kind_started ON operations (kind, started_at DESC);
       CREATE INDEX IF NOT EXISTS operations_app_started ON operations (app_id, started_at DESC);`)
-    // Anything still "running" belongs to a previous API process that is gone.
-    await this.pool.query(
-      `UPDATE operations SET status = 'failed', finished_at = now(), error = 'interrupted: API restarted'
-       WHERE status = 'running'`,
-    )
+    // Only work owned by the old API process was interrupted. Queued work survives either pod.
+    if (recoverLocal) {
+      await this.pool.query(
+        `UPDATE operations SET status = 'failed', finished_at = now(), error = 'interrupted: API restarted'
+         WHERE status = 'running' AND queue_message IS NULL`,
+      )
+    }
   }
 
   static toOp(r) {
@@ -94,19 +114,47 @@ export class PgStore {
     }
   }
 
-  async create(op) {
+  async create(op, message) {
+    const client = await this.pool.connect()
     try {
-      await this.pool.query(
-        `INSERT INTO operations (id, kind, app_id, status, steps, started_at, backup_id, detail, idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [op.id, op.kind, op.appId, op.status, JSON.stringify(op.steps), op.startedAt, op.backupId ?? null,
-          op.detail ? JSON.stringify(op.detail) : null, op.idempotencyKey ?? null],
+      await client.query('BEGIN')
+      // Serialize only the short check-and-insert, including across API processes.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('rebound:operation-admission'))")
+      const { rows } = await client.query(
+        `SELECT * FROM operations WHERE idempotency_key = $1 OR
+         (status = 'running' AND kind = $2 AND (kind = 'restore' OR app_id = $3))
+         ORDER BY (idempotency_key = $1) DESC NULLS LAST, started_at DESC LIMIT 1`,
+        [op.idempotencyKey ?? null, op.kind, op.appId],
       )
+      if (!rows.length) {
+        await client.query(
+          `INSERT INTO operations (id, kind, app_id, status, steps, started_at, backup_id, detail, idempotency_key, queue_message)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [op.id, op.kind, op.appId, op.status, JSON.stringify(op.steps), op.startedAt, op.backupId ?? null,
+            op.detail ?? null, op.idempotencyKey ?? null, message ?? null],
+        )
+      }
+      await client.query('COMMIT')
+      return rows.length ? PgStore.toOp(rows[0]) : op
     } catch (err) {
-      if (err.code === '23505') throw Object.assign(new Error('duplicate idempotency key'), { code: 'DUPLICATE' })
+      await client.query('ROLLBACK')
       throw err
+    } finally {
+      client.release()
     }
-    return op
+  }
+
+  // Recover the gap between committing a new operation and sending its message to SQS.
+  async pendingMessages(before) {
+    const { rows } = await this.pool.query(
+      `SELECT queue_message FROM operations WHERE status = 'running' AND queue_message IS NOT NULL
+       AND dispatched_at IS NULL AND started_at < $1 ORDER BY started_at LIMIT 10`, [before],
+    )
+    return rows.map((row) => row.queue_message)
+  }
+
+  async markDispatched(id) {
+    await this.pool.query('UPDATE operations SET dispatched_at = now() WHERE id = $1 AND dispatched_at IS NULL', [id])
   }
 
   async update(id, patch) {

@@ -31,6 +31,14 @@ ECR_REGISTRY="$(tf_out foundation ecr_registry)"
 BUCKET="$(tf_out foundation backup_bucket)"
 KMS_ARN="$(tf_out foundation kms_key_arn)"
 PUBLIC_URL="$(tf_out foundation public_url)"
+# An existing foundation may predate SQS. Bootstrap just the queues in that case,
+# before the cluster tries to look up the queue and before the later CloudFront update.
+if ! QUEUE_URL="$(tf_out foundation operations_queue_url 2>/dev/null)"; then
+  step "Adding the operations queues to the existing foundation"
+  terraform -chdir="$INFRA/foundation" apply -input=false $APPROVE \
+    -target=aws_sqs_queue.operations_dlq -target=aws_sqs_queue.operations
+  QUEUE_URL="$(tf_out foundation operations_queue_url)"
+fi
 cat > "$INFRA/backend.hcl" <<EOF
 bucket       = "$(tf_out foundation tfstate_bucket)"
 region       = "$REGION"
@@ -58,6 +66,7 @@ ECR_REGISTRY=$ECR_REGISTRY
 JOBS_IMAGE=$ECR_REGISTRY/rebound/backup-restore:$TAG
 APP_IMAGE_REPO=
 S3_BUCKET=$BUCKET
+QUEUE_URL=$QUEUE_URL
 S3_KMS_KEY_ID=$KMS_ARN
 SECRETS_KMS_KEY_ID=$KMS_ARN
 DATA_JOBS_ROLE_ARN=$(tf_out cluster data_jobs_role_arn)
@@ -107,6 +116,7 @@ APP_REPO="github.com/adamk-codes/cmps297u-paas" APP_ICON=notes \
   "$ROOT/deploy/deploy-app.sh" notes-app "$ECR_REGISTRY/notes-app:$TAG"
 envsubst < "$ROOT/api/k8s/api.yaml" | kubectl apply -f -
 kubectl rollout status deploy/rebound-api -n "$NAMESPACE" --timeout=180s
+kubectl rollout status deploy/rebound-worker -n "$NAMESPACE" --timeout=32m
 
 step "Waiting for the shared ALB"
 ALB=""

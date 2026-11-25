@@ -73,13 +73,25 @@ resource "aws_iam_role_policy" "data_jobs" {
   policy = data.aws_iam_policy_document.data_jobs.json
 }
 
-# Platform API: lists backups and reads their metadata; everything else goes through Jobs.
+# The API and worker share the workload role and the operations queue.
+data "aws_sqs_queue" "operations" {
+  name = "${var.name}-operations"
+}
+
 resource "aws_iam_role" "api" {
   name               = "${local.name}-api"
   assume_role_policy = data.aws_iam_policy_document.irsa_trust["api"].json
 }
 
 data "aws_iam_policy_document" "api" {
+  statement {
+    sid = "OperationsQueue"
+    actions = [
+      "sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage",
+      "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes",
+    ]
+    resources = [data.aws_sqs_queue.operations.arn]
+  }
   statement {
     sid       = "ListBackups"
     actions   = ["s3:ListBucket"]
