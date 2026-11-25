@@ -85,6 +85,10 @@ jobs:
             echo "::warning::$TAG was pushed outside CI (by up.sh) and has no ECR scan; skipping the vulnerability gate"
             exit 0
           fi
+          for i in $(seq 1 30); do
+            aws ecr describe-image-scan-findings --repository-name "$APP" --image-id imageTag="$TAG" >/dev/null 2>&1 && break
+            echo "Waiting for ECR to start the scan ($i/30)"; sleep 5
+          done
           aws ecr wait image-scan-complete --repository-name "$APP" --image-id imageTag="$TAG"
           CRITICAL=$(aws ecr describe-image-scan-findings --repository-name "$APP" --image-id imageTag="$TAG" \
             --query 'imageScanFindings.findingSeverityCounts.CRITICAL' --output text)
