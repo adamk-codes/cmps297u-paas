@@ -1,0 +1,99 @@
+name: notes-app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "sample-apps/notes-app/**"
+      - "deploy/**"
+      - ".github/workflows/deploy-notes-app.yml"
+  pull_request:
+    paths:
+      - "sample-apps/notes-app/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC token for AWS
+  contents: read
+
+env:
+  APP: notes-app
+  APP_DIR: sample-apps/notes-app
+  AWS_REGION: us-east-1
+  CLUSTER: rebound
+
+concurrency:
+  group: notes-app-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to AWS (OIDC, no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: image
+        run: |
+          TAG="${GITHUB_SHA::7}"
+          IMAGE="${{ steps.ecr.outputs.registry }}/${APP}:${TAG}"
+          # Tags are immutable: a re-run of the same commit reuses the image already pushed.
+          if aws ecr describe-images --repository-name "$APP" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "$IMAGE already in ECR"
+          else
+            docker build --build-arg "IMAGE_TAG=$TAG" -t "$IMAGE" "$APP_DIR"
+            docker push "$IMAGE"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Block on CRITICAL vulnerabilities (ECR scan on push)
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          aws ecr wait image-scan-complete --repository-name "$APP" --image-id imageTag="$TAG"
+          CRITICAL=$(aws ecr describe-image-scan-findings --repository-name "$APP" --image-id imageTag="$TAG" \
+            --query 'imageScanFindings.findingSeverityCounts.CRITICAL' --output text)
+          HIGH=$(aws ecr describe-image-scan-findings --repository-name "$APP" --image-id imageTag="$TAG" \
+            --query 'imageScanFindings.findingSeverityCounts.HIGH' --output text)
+          echo "Scan findings: CRITICAL=$CRITICAL HIGH=$HIGH" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$CRITICAL" != "None" ] && [ "$CRITICAL" -gt 0 ]; then
+            echo "::error::Image has $CRITICAL critical vulnerabilities; not deploying"; exit 1
+          fi
+
+      - name: Deploy to EKS (rolls back automatically if unhealthy)
+        env:
+          APP_REPO: github.com/${{ github.repository }}
+          APP_ICON: notes
+          APP_DESCRIPTION: Team notes; the sample app for backups and verified restores
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER"
+          deploy/deploy-app.sh "$APP" "${{ steps.image.outputs.image }}"
+          echo "Deployed ${{ steps.image.outputs.image }}" >> "$GITHUB_STEP_SUMMARY"
