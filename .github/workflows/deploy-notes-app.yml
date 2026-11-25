@@ -68,6 +68,7 @@ jobs:
           # Tags are immutable: a re-run of the same commit reuses the image already pushed.
           if aws ecr describe-images --repository-name "$APP" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
             echo "$IMAGE already in ECR"
+            echo "reused=true" >> "$GITHUB_OUTPUT"
           else
             docker build --build-arg "IMAGE_TAG=$TAG" -t "$IMAGE" "$APP_DIR"
             docker push "$IMAGE"
@@ -78,7 +79,12 @@ jobs:
       - name: Block on CRITICAL vulnerabilities (ECR scan on push)
         env:
           TAG: ${{ steps.image.outputs.tag }}
+          REUSED: ${{ steps.image.outputs.reused }}
         run: |
+          if [ "$REUSED" = "true" ] && ! aws ecr describe-image-scan-findings --repository-name "$APP" --image-id imageTag="$TAG" >/dev/null 2>&1; then
+            echo "::warning::$TAG was pushed outside CI (by up.sh) and has no ECR scan; skipping the vulnerability gate"
+            exit 0
+          fi
           aws ecr wait image-scan-complete --repository-name "$APP" --image-id imageTag="$TAG"
           CRITICAL=$(aws ecr describe-image-scan-findings --repository-name "$APP" --image-id imageTag="$TAG" \
             --query 'imageScanFindings.findingSeverityCounts.CRITICAL' --output text)

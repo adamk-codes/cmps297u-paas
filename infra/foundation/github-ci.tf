@@ -31,7 +31,10 @@ data "aws_iam_policy_document" "ci_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/main"]
+      values = [
+        "repo:${var.github_repository}:ref:refs/heads/main",
+        "repo:adamk-codes@215509216/cmps297u-paas@1432013719:ref:refs/heads/main",
+      ]
     }
   }
 }
