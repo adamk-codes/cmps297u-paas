@@ -53,7 +53,7 @@ export function DeployModal({
   const selected = repos?.find((r) => r.fullName === repo)
   const nameError =
     validateAppName(name) ?? (takenNames.includes(name) ? `An app named "${name}" already exists` : null)
-  const url = `https://${name || 'your-app'}.${REGION}.appplatform.internal`
+  const url = `${window.location.origin}/apps/${name || 'your-app'}/`
 
   function chooseRepo(next: string) {
     setRepo(next)

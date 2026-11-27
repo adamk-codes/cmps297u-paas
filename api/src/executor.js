@@ -30,6 +30,24 @@ export function createExecutor(config, run = runScript) {
         const r = res.results.DEPLOY_RESULT
         return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'rollout failed; previous image restored')
       },
+      // New app from the newest CI-built, scanned image of sourceApp (deploy/deploy-new-app.sh).
+      async deploy({ appId, sourceApp, repo, onStep }) {
+        if (!config.ecrRegistry) return { ok: false, error: 'ECR_REGISTRY is not set', logTail: [] }
+        const res = await run({
+          command: 'bash',
+          args: [config.deployNewScript, appId, sourceApp],
+          env: {
+            REBOUND_DATA: runner,
+            APP_REPO: repo ?? '',
+            APP_ICON: sourceApp === 'notes-app' ? 'notes' : 'box',
+            APP_DESCRIPTION: `Deployed from the dashboard (${sourceApp})`,
+          },
+          timeoutMs,
+          onStep,
+        })
+        const r = res.results.DEPLOY_RESULT
+        return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'deploy failed')
+      },
       async backup({ appId, onStep }) {
         const res = await run({ command: 'bash', args: [runner, 'backup', appId], env: s3Env(), timeoutMs, onStep })
         const r = res.results.BACKUP_RESULT
@@ -65,6 +83,9 @@ export function createExecutor(config, run = runScript) {
     mode: 'process',
     async redeploy() {
       return { ok: false, error: 'redeploys run on the cluster (EXECUTOR=kubernetes)', logTail: [] }
+    },
+    async deploy() {
+      return { ok: false, error: 'new deploys run on the cluster (EXECUTOR=kubernetes)', logTail: [] }
     },
     async backup({ appId, onStep }) {
       const app = config.localApps[appId]

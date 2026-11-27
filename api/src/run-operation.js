@@ -31,6 +31,12 @@ async function execute(op, message, { executor, catalog }, onStep, backup) {
     const { image, imageTag } = outcome.result
     return { ok: true, detail: { image, imageTag } }
   }
+  if (kind === 'deploy') {
+    const outcome = await executor.deploy({ appId, sourceApp: message.sourceApp, repo: message.repo, onStep })
+    if (!outcome.ok) return outcome
+    const { image, imageTag } = outcome.result
+    return { ok: true, detail: { image, imageTag, sourceApp: message.sourceApp } }
+  }
   throw new Error(`Unsupported operation kind: ${kind}`)
 }
 

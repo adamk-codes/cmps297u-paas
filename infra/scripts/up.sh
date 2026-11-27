@@ -91,7 +91,8 @@ push() { # <build-context> <registry/repo:tag> [extra docker build args...]
   if aws ecr describe-images --repository-name "$repo" --image-ids "imageTag=$tag" --region "$REGION" >/dev/null 2>&1; then
     echo "$image already in ECR"; return
   fi
-  docker build "$@" -t "$image" "$ctx"
+  # Plain manifests (no provenance/SBOM index) so ECR's scan-on-push can scan them, like CI's images.
+  docker build --provenance=false --sbom=false "$@" -t "$image" "$ctx"
   docker push "$image"
 }
 

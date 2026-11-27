@@ -54,7 +54,11 @@ export function loadConfig(env = process.env) {
     postgresVersion: env.POSTGRES_VERSION || '16',
     ecrRegistry: env.ECR_REGISTRY || '',
     deployScript: env.DEPLOY_SCRIPT || fileURLToPath(new URL('../../deploy/deploy-app.sh', import.meta.url)),
-    // [{ "fullName": "github.com/org/notes-app", "defaultBranch": "main", "runtime": "Node.js 20" }]
+    deployNewScript: env.DEPLOY_NEW_SCRIPT || fileURLToPath(new URL('../../deploy/deploy-new-app.sh', import.meta.url)),
+    // "Deploy new app" guardrail: at most this many apps (pods, DB connections and cost are shared).
+    maxApps: Number.parseInt(env.MAX_APPS || '4', 10),
+    // [{ "fullName": "github.com/org/repo", "defaultBranch": "main", "runtime": "Node.js 20", "sourceApp": "notes-app" }]
+    // sourceApp = the ECR repository the CI pipeline pushes this repo's images to.
     approvedRepos: Array.isArray(parseJson(env.APPROVED_REPOS, 'APPROVED_REPOS'))
       ? parseJson(env.APPROVED_REPOS, 'APPROVED_REPOS')
       : [],

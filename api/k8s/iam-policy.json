@@ -22,6 +22,24 @@
       "Effect": "Allow",
       "Action": "s3:GetObject",
       "Resource": "arn:aws:s3:::BACKUP_BUCKET/backups/*"
+    },
+    {
+      "Sid": "NewAppImages",
+      "Effect": "Allow",
+      "Action": ["ecr:DescribeImages", "ecr:DescribeImageScanFindings"],
+      "Resource": "arn:aws:ecr:REGION:ACCOUNT_ID:repository/*"
+    },
+    {
+      "Sid": "NewAppDatabaseLogin",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:rebound/apps/*"
+    },
+    {
+      "Sid": "NewAppDatabaseLoginKey",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "KMS_KEY_ARN"
     }
   ]
 }
