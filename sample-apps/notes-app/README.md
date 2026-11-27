@@ -45,3 +45,5 @@ docker compose --profile recovery down -v   # clean up
 | POST | `/api/demo/data-loss` | `{ percent: 80 }` → deletes the oldest 80% (only if enabled) |
 
 Kubernetes probes: readiness and liveness on `GET /healthz`. ALB health check path: `<BASE_PATH>/healthz`.
+
+Version 2 of the notes app.
