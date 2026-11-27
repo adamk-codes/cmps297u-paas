@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { BadgeCheck, Database, GitFork, LogIn, Lock, Network, NotepadText, Search, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { BadgeCheck, Database, GitFork, LogIn, Lock, Network, NotepadText, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../lib/auth'
 import { Logo } from '../components/ui'
@@ -64,7 +64,7 @@ export function Landing() {
               </div>
               <div className="mx-auto flex min-w-0 items-center gap-2 rounded-md bg-white px-3 py-1.5 font-mono text-xs text-slate-700 shadow-xs">
                 <Lock className="size-3.5 shrink-0 text-emerald-600" />
-                <span className="truncate">console.internal.app-platform.net</span>
+                <span className="truncate">d2mwzz4cj5ikyf.cloudfront.net</span>
               </div>
               <SlidersHorizontal className="hidden size-4 text-slate-500 sm:block" />
             </div>
@@ -72,15 +72,11 @@ export function Landing() {
             <div className="p-5 sm:p-8">
               <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium tracking-wider text-slate-500 uppercase">Organization workspace</p>
+                  <p className="text-xs font-medium tracking-wider text-slate-500 uppercase">Team apps</p>
                   <p className="mt-1 flex items-center gap-2 text-xl font-semibold text-slate-900">
-                    Core services
+                    Team apps
                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-blue-700">2 active</span>
                   </p>
-                </div>
-                <div className="flex items-center gap-3 text-sm text-slate-500">
-                  <Search className="size-4" />
-                  <span className="rounded-md bg-slate-100 px-3 py-2">Filter by branch…</span>
                 </div>
               </div>
 
@@ -111,7 +107,7 @@ export function Landing() {
                     <div className="flex items-center gap-3">
                       <span className="font-mono text-xs text-slate-600">us-east-1</span>
                       <span className="inline-flex items-center gap-2 rounded-md bg-recover-soft px-3 py-2 text-xs font-medium text-recover-dark">
-                        <BadgeCheck className="size-4" /> Backup verified 02:00 AM UTC
+                        <BadgeCheck className="size-4" /> Backup verified 4:00 AM Beirut time
                       </span>
                     </div>
                   </li>

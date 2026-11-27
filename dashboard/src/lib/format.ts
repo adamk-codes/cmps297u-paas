@@ -1,16 +1,31 @@
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+// All platform times are shown in Beirut time (Intl handles daylight saving).
+const TIME_ZONE = 'Asia/Beirut'
 
-// "May 30, 09:14 AM UTC" — all platform times are shown in UTC.
+const dateTimeFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: TIME_ZONE,
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+})
+
+const clockFmt = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+
+// "Nov 27, 4:00 AM Beirut". The name is kept so existing callers don't change.
 export function formatUtc(iso: string): string {
-  const d = new Date(iso)
-  const h = d.getUTCHours()
-  const hh = String(h % 12 || 12).padStart(2, '0')
-  const mm = String(d.getUTCMinutes()).padStart(2, '0')
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${hh}:${mm} ${h < 12 ? 'AM' : 'PM'} UTC`
+  return `${dateTimeFmt.format(new Date(iso))} Beirut`
 }
 
+// "04:00:12", in Beirut time (used for log lines).
 export function formatTime(iso: string): string {
-  return new Date(iso).toISOString().slice(11, 19)
+  return clockFmt.format(new Date(iso))
 }
 
 export function timeAgo(iso: string): string {
