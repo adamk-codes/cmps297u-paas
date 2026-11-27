@@ -6,7 +6,7 @@ import { HttpError } from './operations.js'
 // keep them in sync. Used for the "this session" estimate next to the real Cost Explorer data.
 export const SESSION_RATE = [
   { item: 'EKS control plane', perHour: 0.1 },
-  { item: 'EC2 nodes (2 × t3.medium)', perHour: 0.0832 },
+  { item: 'EC2 nodes (2 × c7i-flex.large)', perHour: 0.1696 },
   { item: 'NAT gateway', perHour: 0.045 },
   { item: 'Application Load Balancer', perHour: 0.0305 },
   { item: 'RDS db.t4g.micro', perHour: 0.016 },

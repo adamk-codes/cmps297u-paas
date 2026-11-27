@@ -75,7 +75,7 @@ test('report combines spend, forecast, budget and the session rate, and is cache
   assert.equal(r.forecastMonth, 12)
   assert.deepEqual(r.budget, { name: 'rebound-monthly', limit: 40, actual: 2.66, forecast: 12, alertThresholds: [50, 80, 100] })
   assert.equal(r.sessionRate.items.length, SESSION_RATE.length)
-  assert.ok(r.sessionRate.perHour > 0.29 && r.sessionRate.perHour < 0.31)
+  assert.ok(r.sessionRate.perHour > 0.37 && r.sessionRate.perHour < 0.39)
 
   const calls = sent.length
   await svc.report()

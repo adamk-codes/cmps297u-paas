@@ -465,7 +465,7 @@ export const mockApi: PlatformApi = {
     const app = findApp(appId)
     const lines: [number, LogLine['level'], string][] = [
       [180, 'info', `Pulled image ${app.image.tag} (${app.image.digest.slice(0, 19)})`],
-      [178, 'info', 'Pod started on EKS (t3.medium node)'],
+      [178, 'info', 'Pod started on EKS (c7i-flex.large node)'],
       [177, 'info', app.database ? `Connected to PostgreSQL ${app.database.version} database "${app.database.name}"` : 'No database configured'],
       [176, 'info', 'Listening on port 3000'],
       [120, 'info', 'GET /health 200 3ms'],
@@ -497,7 +497,7 @@ export const mockApi: PlatformApi = {
 
 const SESSION_RATE = [
   { item: 'EKS control plane', perHour: 0.1 },
-  { item: 'EC2 nodes (2 × t3.medium)', perHour: 0.0832 },
+  { item: 'EC2 nodes (2 × c7i-flex.large)', perHour: 0.1696 },
   { item: 'NAT gateway', perHour: 0.045 },
   { item: 'Application Load Balancer', perHour: 0.0305 },
   { item: 'RDS db.t4g.micro', perHour: 0.016 },
