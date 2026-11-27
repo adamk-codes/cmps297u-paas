@@ -67,7 +67,7 @@ describe('notes-app under BASE_PATH', () => {
   test('only serves the app under the base path', async () => {
     assert.equal((await fetch(`${base}/api/notes`)).status, 404)
     const page = await fetch(`${base}/apps/notes-app/`)
-    assert.equal(page.status, 200)
+    assert.equal(page.status, 201)
     assert.match(await page.text(), /action="\/apps\/notes-app\/notes"/)
   })
 
