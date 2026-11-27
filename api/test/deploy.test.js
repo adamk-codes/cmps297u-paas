@@ -34,7 +34,9 @@ async function serve(t, { executor = {}, existing = ['notes-app'], queue, env = 
   const deploy = (body) => fetch(base + '/api/apps', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
-  return { deps, operations, deploy, get: async (path) => (await fetch(base + path)).json() }
+  const get = async (path) => (await fetch(base + path)).json()
+  get.base = base
+  return { deps, operations, deploy, get }
 }
 
 test('rejects unapproved repos, bad or taken names, no database, and too many apps', async (t) => {
@@ -126,4 +128,48 @@ test('through SQS, the message carries the source app and the worker runs the de
   assert.equal(ran, 1)
   assert.equal((await operations.get(op.id)).status, 'succeeded')
   assert.deepEqual(deleted, ['r1'])
+})
+
+// ---- "Delete app" (DELETE /api/apps/:appId) ----
+
+test('delete removes an app as an operation; protected, unknown and busy apps are refused', async (t) => {
+  const calls = []
+  let release, finishBackup
+  const executor = {
+    async delete({ appId, onStep }) {
+      calls.push(appId)
+      onStep('database')
+      await new Promise((r) => { release = r })
+      return { ok: true, result: { status: 'succeeded', droppedDatabases: ['team_notes'], secretDeleted: true } }
+    },
+    // A backup that waits until the end of the test, to make the app busy.
+    backup: () => new Promise((r) => { finishBackup = () => r({ ok: false, error: 'stopped' }) }),
+  }
+  const { deps, get } = await serve(t, { executor, existing: ['notes-app', 'team-notes', 'busy-app'] })
+  const base = get.base
+  const del = (id) => fetch(`${base}/api/apps/${id}`, { method: 'DELETE' })
+
+  assert.equal((await del('notes-app')).status, 403)
+  assert.equal((await del('nope')).status, 404)
+
+  await fetch(`${base}/api/apps/busy-app/backups`, { method: 'POST' })
+  const busy = await del('busy-app')
+  assert.equal(busy.status, 409)
+  assert.match((await busy.json()).error, /in progress/)
+
+  const res = await del('team-notes')
+  assert.equal(res.status, 202)
+  const op = await res.json()
+  assert.equal(op.kind, 'delete')
+  assert.deepEqual(op.steps.map((s) => s.key), ['stop', 'database'])
+  assert.equal((await del('team-notes')).status, 409, 'a second delete of the same app is refused')
+  await new Promise((r) => setTimeout(r, 10))
+  release()
+  await new Promise((r) => setTimeout(r, 10))
+  const done = await get(`/api/operations/${op.id}`)
+  assert.equal(done.status, 'succeeded')
+  assert.deepEqual(done.detail, { droppedDatabases: ['team_notes'], secretDeleted: true })
+  assert.deepEqual(calls, ['team-notes'])
+  assert.ok(deps)
+  finishBackup()
 })

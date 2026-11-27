@@ -8,9 +8,12 @@ import { HttpError } from './operations.js'
 //   restore(backupId)     POST /api/backups/:backupId/restore    -> 202 Operation (409 if one is running)
 //   listRestores()        GET  /api/restores
 //   getOperation(id)      GET  /api/operations/:id
+//   listOperations()      GET  /api/operations?limit=   (Activity page: newest first, with startedBy)
 //   listApps / getApp     GET  /api/apps, /api/apps/:appId        (from Kubernetes)
 //   getLogs(appId)        GET  /api/apps/:appId/logs
 //   redeploy(appId, tag)  POST /api/apps/:appId/redeploy {imageTag} -> 202 Operation
+//   deleteApp(appId)      DELETE /api/apps/:appId -> 202 Operation (backups are kept)
+//   runDrill(appId)       POST /api/apps/:appId/drill -> 202 Operation (recovery drill on the newest backup)
 //   listApprovedRepos()   GET  /api/repos
 //   deploy(req)           POST /api/apps {repo, name, createDatabase} -> 202 Operation
 //                         (releases the newest CI-built, scanned image of the repo under a new name + new DB)
@@ -28,7 +31,7 @@ export function createApp({ operations, apps, costs, config, verifier }) {
       res.set('Access-Control-Allow-Origin', origin)
       res.set('Vary', 'Origin')
       res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key')
-      res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
+      res.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     }
     if (req.method === 'OPTIONS') return res.status(204).end()
     next()
@@ -36,6 +39,8 @@ export function createApp({ operations, apps, costs, config, verifier }) {
 
   const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).catch(next)
   const idem = (req) => req.get('Idempotency-Key') || undefined
+  // Activity log: the signed-in team member (Cognito email). Unset when auth is off (local dev).
+  const who = (req) => req.user?.email || undefined
 
   app.get('/healthz', (_req, res) => res.json({ status: 'ok', executor: config.executor }))
   app.get('/api/healthz', (_req, res) => res.json({ status: 'ok', executor: config.executor }))
@@ -77,7 +82,25 @@ export function createApp({ operations, apps, costs, config, verifier }) {
     if (!target.history.some((h) => h.tag === tag)) {
       throw new HttpError(400, `image ${tag} is not in ${target.id}'s history`)
     }
-    const op = await operations.startRedeploy(target.id, tag, { idempotencyKey: idem(req) })
+    const op = await operations.startRedeploy(target.id, tag, { idempotencyKey: idem(req), startedBy: who(req) })
+    res.status(202).location(`/api/operations/${op.id}`).json(op)
+  }))
+
+  // Recovery drill now (the same test runs nightly by itself, see drill-scheduler.js).
+  app.post('/api/apps/:appId/drill', wrap(async (req, res) => {
+    const target = await findApp(req.params.appId)
+    const op = await operations.startDrill(target.id, { idempotencyKey: idem(req), startedBy: who(req) })
+    res.status(202).location(`/api/operations/${op.id}`).json(op)
+  }))
+
+  // Delete an app: stop it, remove its recovery copy and daily backup, drop its database and login.
+  // Its backups stay in S3, so the data can still be restored after a mistake.
+  app.delete('/api/apps/:appId', wrap(async (req, res) => {
+    const target = await findApp(req.params.appId)
+    if (config.protectedApps.includes(target.id)) {
+      throw new HttpError(403, `${target.id} is the platform's demo app and can't be deleted`)
+    }
+    const op = await operations.startDelete(target.id, { idempotencyKey: idem(req), startedBy: who(req) })
     res.status(202).location(`/api/operations/${op.id}`).json(op)
   }))
 
@@ -116,7 +139,7 @@ export function createApp({ operations, apps, costs, config, verifier }) {
     if (existing.filter((a) => !a.id.endsWith('-recovery')).length >= config.maxApps) {
       throw new HttpError(409, `This platform runs at most ${config.maxApps} apps; delete one first`)
     }
-    const op = await operations.startDeploy(name, { sourceApp: approved.sourceApp, repo, idempotencyKey: idem(req) })
+    const op = await operations.startDeploy(name, { sourceApp: approved.sourceApp, repo, idempotencyKey: idem(req), startedBy: who(req) })
     res.status(202).location(`/api/operations/${op.id}`).json(op)
   }))
 
@@ -133,12 +156,12 @@ export function createApp({ operations, apps, costs, config, verifier }) {
   }))
 
   app.post('/api/apps/:appId/backups', wrap(async (req, res) => {
-    const op = await operations.startBackup(req.params.appId, { idempotencyKey: idem(req) })
+    const op = await operations.startBackup(req.params.appId, { idempotencyKey: idem(req), startedBy: who(req) })
     res.status(202).location(`/api/operations/${op.id}`).json(op)
   }))
 
   app.post('/api/backups/:backupId/restore', wrap(async (req, res) => {
-    const op = await operations.startRestore(req.params.backupId, { idempotencyKey: idem(req) })
+    const op = await operations.startRestore(req.params.backupId, { idempotencyKey: idem(req), startedBy: who(req) })
     res.status(202).location(`/api/operations/${op.id}`).json(op)
   }))
 
@@ -148,7 +171,8 @@ export function createApp({ operations, apps, costs, config, verifier }) {
 
   app.get('/api/operations', wrap(async (req, res) => {
     const { kind, appId, status } = req.query
-    res.json(await operations.store.list({ kind, appId, status, limit: 100 }))
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 200)
+    res.json(await operations.store.list({ kind, appId, status, limit }))
   }))
 
   app.get('/api/operations/:id', wrap(async (req, res) => {

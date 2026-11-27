@@ -27,7 +27,8 @@
         "secretsmanager:CreateSecret",
         "secretsmanager:PutSecretValue",
         "secretsmanager:DescribeSecret",
-        "secretsmanager:GetSecretValue"
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DeleteSecret"
       ],
       "Resource": "arn:aws:secretsmanager:*:*:secret:rebound/apps/*"
     }

@@ -22,7 +22,13 @@ export interface PlatformApi {
   listApprovedRepos(): Promise<ApprovedRepo[]>
   deploy(req: DeployRequest): Promise<Operation>
   redeploy(appId: string, imageTag: string): Promise<Operation>
+  // Recovery drill: restore the newest backup into a temporary database, count, drop. Also runs nightly.
+  runDrill(appId: string): Promise<Operation>
+  // Removes the app, its recovery copy and its database. Its backups stay in S3.
+  deleteApp(appId: string): Promise<Operation>
   getOperation(id: string): Promise<Operation>
+  // Activity log: recent operations across all apps, newest first.
+  listOperations(limit?: number): Promise<Operation[]>
   listBackups(appId?: string): Promise<Backup[]>
   createBackup(appId: string): Promise<Operation>
   restore(backupId: string): Promise<Operation>

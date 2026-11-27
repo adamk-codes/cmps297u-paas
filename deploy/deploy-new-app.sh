@@ -9,7 +9,8 @@
 #   ::step test     newest image of <source-app> in ECR (CI pushes only after `npm test` passed)
 #   ::step build    ECR scan gate: wait for the scan, block on CRITICAL findings
 #   ::step store    own PostgreSQL database + login for the new app (rebound-data.sh provision)
-#   ::step release  deploy/deploy-app.sh: Deployment, Service, Ingress (/apps/<new-app>), HPA; rolls back if unhealthy
+#   ::step release  deploy/deploy-app.sh: Deployment, Service, Ingress (/apps/<new-app>), HPA; rolls back if unhealthy;
+#                   then a daily backup CronJob (rebound-data.sh schedule)
 # Needs: aws CLI, jq, kubectl; env ECR_REGISTRY, AWS_REGION, NAMESPACE, JOBS_IMAGE (for provision).
 set -euo pipefail
 
@@ -55,3 +56,5 @@ fi
 
 echo "::step release" >&2
 bash "$HERE/deploy-app.sh" "$APP_NAME" "$IMAGE"
+# Daily scheduled backup, like notes-app (the dashboard promises it). Not fatal: the app is already live.
+bash "$REBOUND_DATA" schedule "$APP_NAME" >/dev/null || log "WARNING: could not schedule daily backups for $APP_NAME"

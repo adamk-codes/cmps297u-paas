@@ -86,6 +86,8 @@ export class PgStore {
       );
       ALTER TABLE operations ADD COLUMN IF NOT EXISTS queue_message JSONB;
       ALTER TABLE operations ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+      ALTER TABLE operations ADD COLUMN IF NOT EXISTS started_by TEXT;
+      CREATE INDEX IF NOT EXISTS operations_started ON operations (started_at DESC);
       CREATE INDEX IF NOT EXISTS operations_kind_started ON operations (kind, started_at DESC);
       CREATE INDEX IF NOT EXISTS operations_app_started ON operations (app_id, started_at DESC);`)
     // Only work owned by the old API process was interrupted. Queued work survives either pod.
@@ -111,6 +113,7 @@ export class PgStore {
       ...(r.backup_id && { backupId: r.backup_id }),
       ...(r.detail && { detail: r.detail }),
       ...(r.idempotency_key && { idempotencyKey: r.idempotency_key }),
+      ...(r.started_by && { startedBy: r.started_by }),
     }
   }
 
@@ -128,10 +131,10 @@ export class PgStore {
       )
       if (!rows.length) {
         await client.query(
-          `INSERT INTO operations (id, kind, app_id, status, steps, started_at, backup_id, detail, idempotency_key, queue_message)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          `INSERT INTO operations (id, kind, app_id, status, steps, started_at, backup_id, detail, idempotency_key, queue_message, started_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [op.id, op.kind, op.appId, op.status, JSON.stringify(op.steps), op.startedAt, op.backupId ?? null,
-            op.detail ?? null, op.idempotencyKey ?? null, message ?? null],
+            op.detail ?? null, op.idempotencyKey ?? null, message ?? null, op.startedBy ?? null],
         )
       }
       await client.query('COMMIT')

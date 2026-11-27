@@ -48,6 +48,18 @@ export function createExecutor(config, run = runScript) {
         const r = res.results.DEPLOY_RESULT
         return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'deploy failed')
       },
+      // Recovery drill: restore into a temporary database, count, drop (rebound-data.sh drill).
+      async drill({ appId, backup, onStep }) {
+        const res = await run({ command: 'bash', args: [runner, 'drill', appId, backup.s3Key], env: s3Env(), timeoutMs, onStep })
+        const r = res.results.DRILL_RESULT
+        return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'drill failed')
+      },
+      // "Delete app": cluster resources, then database + login (rebound-data.sh delete). Backups stay in S3.
+      async delete({ appId, onStep }) {
+        const res = await run({ command: 'bash', args: [runner, 'delete', appId], env: {}, timeoutMs, onStep })
+        const r = res.results.DELETE_RESULT
+        return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'delete failed')
+      },
       async backup({ appId, onStep }) {
         const res = await run({ command: 'bash', args: [runner, 'backup', appId], env: s3Env(), timeoutMs, onStep })
         const r = res.results.BACKUP_RESULT
@@ -87,6 +99,9 @@ export function createExecutor(config, run = runScript) {
     async deploy() {
       return { ok: false, error: 'new deploys run on the cluster (EXECUTOR=kubernetes)', logTail: [] }
     },
+    async delete() {
+      return { ok: false, error: 'deleting apps runs on the cluster (EXECUTOR=kubernetes)', logTail: [] }
+    },
     async backup({ appId, onStep }) {
       const app = config.localApps[appId]
       if (!app?.databaseUrl) return { ok: false, error: `no LOCAL_APPS entry with databaseUrl for ${appId}`, logTail: [] }
@@ -105,6 +120,24 @@ export function createExecutor(config, run = runScript) {
       })
       const r = res.results.BACKUP_RESULT
       return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'backup failed')
+    },
+    async drill({ appId, backup, onStep }) {
+      if (!config.adminDatabaseUrl) return { ok: false, error: 'ADMIN_DATABASE_URL is not set', logTail: [] }
+      const res = await run({
+        command: 'bash',
+        args: [path.join(config.jobsDir, 'restore.sh')],
+        env: {
+          ...s3Env(),
+          ADMIN_DATABASE_URL: config.adminDatabaseUrl,
+          BACKUP_KEY: backup.s3Key,
+          TARGET_OWNER: appId.replaceAll('-', '_'),
+          DROP_AFTER_CHECK: 'true',
+        },
+        timeoutMs,
+        onStep,
+      })
+      const r = res.results.RESTORE_RESULT
+      return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'drill failed')
     },
     async restore({ appId, backup, onStep }) {
       if (!config.adminDatabaseUrl) return { ok: false, error: 'ADMIN_DATABASE_URL is not set', logTail: [] }

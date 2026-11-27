@@ -17,22 +17,23 @@ function validateKey(key) {
 }
 
 export class Operations {
-  constructor({ store, executor, catalog, queue, now = () => new Date(), log = console }) {
+  constructor({ store, executor, catalog, queue, alerts, now = () => new Date(), log = console }) {
     this.store = store
     this.executor = executor
     this.catalog = catalog
     this.queue = queue
+    this.alerts = alerts
     this.now = now
     this.log = log
     this.inFlight = new Set()
   }
 
-  async startBackup(appId, { idempotencyKey } = {}) {
+  async startBackup(appId, { idempotencyKey, startedBy } = {}) {
     if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
-    return this.start('backup', appId, { idempotencyKey })
+    return this.start('backup', appId, { idempotencyKey, startedBy })
   }
 
-  async startRestore(backupId, { idempotencyKey } = {}) {
+  async startRestore(backupId, { idempotencyKey, startedBy } = {}) {
     // An idempotent replay still works if the original backup has since expired.
     validateKey(idempotencyKey)
     if (idempotencyKey) {
@@ -41,20 +42,46 @@ export class Operations {
     }
     const backup = await this.catalog.get(backupId)
     if (!backup) throw new HttpError(404, `backup ${backupId} was not found`)
-    return this.start('restore', backup.appId, { idempotencyKey, backupId }, backup)
+    return this.start('restore', backup.appId, { idempotencyKey, backupId, startedBy }, backup)
   }
 
-  async startRedeploy(appId, imageTag, { idempotencyKey } = {}) {
+  async startRedeploy(appId, imageTag, { idempotencyKey, startedBy } = {}) {
     if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
     if (!/^[A-Za-z0-9._-]{1,128}$/.test(imageTag ?? '')) throw new HttpError(400, 'invalid image tag')
-    return this.start('redeploy', appId, { idempotencyKey, imageTag })
+    return this.start('redeploy', appId, { idempotencyKey, imageTag, startedBy })
   }
 
   // New app (dashboard "Deploy new app"). The caller checks the repo is approved and the name is free.
-  async startDeploy(appId, { sourceApp, repo, idempotencyKey } = {}) {
+  async startDeploy(appId, { sourceApp, repo, idempotencyKey, startedBy } = {}) {
     if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app name')
     if (!APP_ID.test(sourceApp ?? '')) throw new HttpError(400, 'invalid source app')
-    return this.start('deploy', appId, { idempotencyKey, sourceApp, repo })
+    return this.start('deploy', appId, { idempotencyKey, sourceApp, repo, startedBy })
+  }
+
+  // Recovery drill on the app's newest backup: restore it into a temporary database, count, drop.
+  // A passed drill marks that backup verified, exactly like a manual restore does.
+  async startDrill(appId, { idempotencyKey, startedBy } = {}) {
+    if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
+    validateKey(idempotencyKey)
+    if (idempotencyKey) {
+      const existing = await this.store.findByIdempotencyKey(idempotencyKey)
+      if (existing) return existing
+    }
+    const [backup] = (await this.catalog.list(appId))
+      .filter((b) => b.s3Key && b.status === 'completed')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    if (!backup) throw new HttpError(404, `${appId} has no backups to test yet`)
+    return this.start('drill', appId, { idempotencyKey, backupId: backup.id, startedBy }, backup)
+  }
+
+  // "Delete app". The caller checks the app exists and isn't protected.
+  async startDelete(appId, { idempotencyKey, startedBy } = {}) {
+    if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
+    const busy = await this.store.list({ appId, status: 'running' })
+    if (busy.some((o) => o.kind !== 'delete')) {
+      throw new HttpError(409, `${appId} has an operation in progress; wait for it to finish`, { operationId: busy[0].id })
+    }
+    return this.start('delete', appId, { idempotencyKey, startedBy })
   }
 
   async get(id) {
@@ -63,12 +90,13 @@ export class Operations {
     return op
   }
 
-  async start(kind, appId, { idempotencyKey, backupId, imageTag, sourceApp, repo }, backup) {
+  async start(kind, appId, { idempotencyKey, backupId, imageTag, sourceApp, repo, startedBy }, backup) {
     validateKey(idempotencyKey)
     const op = {
       id: `op-${randomUUID()}`, kind, appId, status: 'running',
       steps: initialSteps(kind), startedAt: this.now().toISOString(),
       ...(backupId && { backupId }), ...(idempotencyKey && { idempotencyKey }),
+      ...(startedBy && { startedBy: String(startedBy).slice(0, 200) }), // activity log: who clicked
     }
     const message = {
       operationId: op.id, kind, appId, ...(backupId && { backupId }), ...(imageTag && { imageTag }),
@@ -79,6 +107,8 @@ export class Operations {
       if ((idempotencyKey && saved.idempotencyKey === idempotencyKey) || kind === 'backup') return saved
       const reason = kind === 'restore' ? 'A restore is already running. Restores run one at a time.'
         : kind === 'deploy' ? `${appId} is already being deployed`
+        : kind === 'delete' ? `${appId} is already being deleted`
+        : kind === 'drill' ? `a recovery drill of ${appId} is already running`
         : `a rollout of ${appId} is already running`
       throw new HttpError(409, reason, { operationId: saved.id })
     }
@@ -111,8 +141,9 @@ export class Operations {
       this.catalog.list(appId),
       this.store.list({ kind: 'backup', appId }),
       this.store.list({ kind: 'restore', status: 'succeeded' }),
-    ])
-    const verified = new Map()
+      this.store.list({ kind: 'drill', status: 'succeeded' }),
+    ]).then(([s, o, r, d]) => [s, o, [...r, ...d].sort((a, b) => b.finishedAt.localeCompare(a.finishedAt))])
+    const verified = new Map() // backup -> newest successful restore or drill
     for (const r of restores) {
       if (r.backupId && !verified.has(r.backupId)) verified.set(r.backupId, r.finishedAt)
     }

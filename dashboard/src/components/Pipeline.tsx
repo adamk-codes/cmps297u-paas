@@ -92,6 +92,17 @@ export const RESTORE_STEPS: PipelineStep[] = [
   { key: 'check', label: 'Check', description: 'Records verified, recovery time measured', state: 'pending' },
 ]
 
+export const DRILL_STEPS: PipelineStep[] = [
+  { key: 'restore', label: 'Restore', description: 'Latest backup into a temporary database', state: 'pending' },
+  { key: 'check', label: 'Check', description: 'Every table and row checked against the backup', state: 'pending' },
+  { key: 'cleanup', label: 'Clean up', description: 'Temporary database dropped; live app untouched', state: 'pending' },
+]
+
+export const DELETE_STEPS: PipelineStep[] = [
+  { key: 'stop', label: 'Stop', description: 'App, recovery copy and daily backup removed', state: 'pending' },
+  { key: 'database', label: 'Database', description: 'Database and login dropped; backups kept in S3', state: 'pending' },
+]
+
 export const REDEPLOY_STEPS: PipelineStep[] = [
   { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR', state: 'pending' },
   { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy', state: 'pending' },

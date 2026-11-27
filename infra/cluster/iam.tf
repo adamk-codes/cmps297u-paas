@@ -62,6 +62,7 @@ data "aws_iam_policy_document" "data_jobs" {
     actions = [
       "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
       "secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:TagResource",
+      "secretsmanager:DeleteSecret", # deprovision: "Delete app"
     ]
     resources = ["arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${var.name}/apps/*"]
   }
@@ -119,6 +120,11 @@ data "aws_iam_policy_document" "api" {
   }
   # "Deploy new app" (deploy/deploy-new-app.sh): find the newest CI image and its scan result,
   # then copy the new app's DB login from Secrets Manager into a Kubernetes Secret.
+  statement {
+    sid       = "FailureAlerts" # api/src/alerts.js -> infra/foundation/alerts.tf
+    actions   = ["sns:Publish"]
+    resources = ["arn:aws:sns:${var.region}:${local.account_id}:${var.name}-alerts"]
+  }
   statement {
     sid       = "NewAppImages"
     actions   = ["ecr:DescribeImages", "ecr:DescribeImageScanFindings"]

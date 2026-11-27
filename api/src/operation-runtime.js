@@ -1,3 +1,4 @@
+import { createAlerts } from './alerts.js'
 import { S3Catalog } from './catalog.js'
 import { createExecutor } from './executor.js'
 import { OperationsQueue } from './queue.js'
@@ -11,5 +12,6 @@ export async function openOperationRuntime(config, { worker = false } = {}) {
   return {
     store, executor: createExecutor(config), catalog: new S3Catalog(config.s3),
     queue: config.queueUrl ? new OperationsQueue(config.queueUrl, config.s3.region) : undefined,
+    alerts: createAlerts(config),
   }
 }

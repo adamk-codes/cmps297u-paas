@@ -28,13 +28,13 @@ export const UNAUTHORIZED_EVENT = 'rebound:unauthorized'
 export function createHttpApi(baseUrl: string, getToken: () => Promise<string | null>): PlatformApi {
   const root = baseUrl.replace(/\/$/, '')
 
-  async function request<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
+  async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' }
     const token = await getToken()
     if (token) headers.Authorization = `Bearer ${token}`
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     // Every POST carries a fresh idempotency key: a retried request never starts the same job twice.
-    if (method === 'POST') headers['Idempotency-Key'] = crypto.randomUUID()
+    if (method === 'POST' || method === 'DELETE') headers['Idempotency-Key'] = crypto.randomUUID()
 
     let res: Response
     try {
@@ -65,6 +65,9 @@ export function createHttpApi(baseUrl: string, getToken: () => Promise<string | 
     listApprovedRepos: () => request<ApprovedRepo[]>('GET', '/api/repos'),
     deploy: (req: DeployRequest) => request<Operation>('POST', '/api/apps', req),
     redeploy: (appId, imageTag) => request<Operation>('POST', `/api/apps/${id(appId)}/redeploy`, { imageTag }),
+    runDrill: (appId) => request<Operation>('POST', `/api/apps/${id(appId)}/drill`),
+    deleteApp: (appId) => request<Operation>('DELETE', `/api/apps/${id(appId)}`),
+    listOperations: (limit = 100) => request<Operation[]>('GET', `/api/operations?limit=${limit}`),
     getOperation: (opId) => request<Operation>('GET', `/api/operations/${id(opId)}`),
     listBackups: (appId) => request<Backup[]>('GET', `/api/backups${appId ? `?appId=${id(appId)}` : ''}`),
     createBackup: (appId) => request<Operation>('POST', `/api/apps/${id(appId)}/backups`),
