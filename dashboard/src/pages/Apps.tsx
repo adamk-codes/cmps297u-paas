@@ -9,7 +9,6 @@ import {
   History,
   Plus,
   Rocket,
-  Server,
   ShieldCheck,
   TriangleAlert,
   Activity,
@@ -72,7 +71,7 @@ function Stats({ apps, backups }: { apps: App[]; backups: Backup[] }) {
           <span className="text-sm text-slate-600">provisioned</span>
         </p>
         <p className="mt-3 flex items-center gap-2 text-sm text-slate-600">
-          <span className="size-1.5 rounded-full bg-slate-500" /> Active regional namespace in us-east-1
+          <span className="size-1.5 rounded-full bg-slate-500" /> Running on EKS · max 4 apps
         </p>
       </StatCard>
 
@@ -134,7 +133,7 @@ function DeploymentsTable({ apps }: { apps: App[] }) {
           <tr>
             <th className={th}>Application</th>
             <th className={th}>Status &amp; health</th>
-            <th className={th}>Internal endpoint</th>
+            <th className={th}>Public URL</th>
             <th className={th}>Image version</th>
             <th className={th}>Deployment &amp; backup</th>
             <th className={cx(th, 'text-right')}>Actions</th>
@@ -222,7 +221,7 @@ export function Apps() {
   return (
     <>
       <PageHeader
-        eyebrow="Overview / Production workloads"
+        eyebrow="Team apps"
         title="Apps"
         actions={
           <Button size="lg" onClick={() => setDeployOpen(true)}>
@@ -251,9 +250,6 @@ export function Apps() {
             Active deployments <CountBadge>{list.length} total</CountBadge>
             {apps.loading && apps.data && <Spinner className="text-slate-400" />}
           </h2>
-          <span className="flex items-center gap-2 text-sm text-slate-600">
-            <Server className="size-4" /> Region: us-east-1
-          </span>
         </div>
         {!apps.data ? (
           <div className="flex justify-center py-12 text-slate-400">
@@ -271,12 +267,10 @@ export function Apps() {
           <div className="grid size-11 place-items-center rounded-md bg-emerald-300 text-emerald-900">
             <ShieldCheck className="size-5" />
           </div>
-          <div>
-            <p className="font-medium text-slate-900">Region us-east-1 operational</p>
-            <p className="text-sm text-slate-600">Daily scheduled backups are enabled for apps with PostgreSQL.</p>
-          </div>
+          <p className="font-medium text-slate-900">
+            Backups every night at 4:00 AM Beirut time · recovery drill at 5:00 AM · failures are emailed to the team
+          </p>
         </div>
-        <span className="rounded-md bg-white px-3 py-1.5 font-mono text-xs text-slate-600">Rebound</span>
       </div>
 
       {deployOpen && (

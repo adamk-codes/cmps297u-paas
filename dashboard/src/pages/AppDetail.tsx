@@ -128,7 +128,7 @@ function DrillModal({ appId, appName, onClose, onChanged }: { appId: string; app
         A recovery drill restores <span className="font-medium text-slate-900">{appName}</span>'s newest backup into a
         temporary database, checks that every table came back with exactly the rows the backup had, then
         deletes the copy. It works for any app, whatever its tables. The live app is never touched.
-        Rebound runs this by itself every night at 03:00 UTC.
+        Rebound runs this by itself every night at 5:00 AM Beirut time.
       </p>
       {error && (
         <div className="mt-4">
@@ -476,12 +476,12 @@ export function AppDetail() {
               ))}
             </ul>
           ) : (
-            <EmptyState title="No backups yet">The first scheduled backup runs at 02:00 UTC.</EmptyState>
+            <EmptyState title="No backups yet">The first scheduled backup runs at 4:00 AM Beirut time.</EmptyState>
           )}
         </Card>
 
         <Card className="overflow-hidden">
-          <SectionTitle aside={<span className="text-sm text-slate-500">CloudWatch Logs</span>}>Recent logs</SectionTitle>
+          <SectionTitle aside={<span className="text-sm text-slate-500">Last 200 lines, from Kubernetes</span>}>Recent logs</SectionTitle>
           <div className="max-h-80 overflow-auto bg-slate-900 px-5 py-4 font-mono text-xs leading-6">
             {logs.data?.map((l, i) => (
               <p key={i} className="whitespace-pre-wrap">

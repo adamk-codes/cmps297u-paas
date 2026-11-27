@@ -21,7 +21,7 @@ const STEP_MS = 1600
 const FAILING_REPO = 'github.com/company-org/failing-tests-demo'
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
-const appUrl = (name: string) => `https://${name}.${REGION}.appplatform.internal`
+const appUrl = (name: string) => `/apps/${name}/`
 const randomHex = (n: number) =>
   Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => b.toString(16).padStart(2, '0'))
     .join('')
@@ -29,7 +29,7 @@ const randomHex = (n: number) =>
 const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms))
 const clone = <T>(v: T): T => structuredClone(v)
 
-// Most recent 02:00 UTC — when scheduled backups run.
+// Most recent 02:00 UTC (4:00 AM Beirut time in winter) — when scheduled backups run.
 function lastScheduledRun(daysBack = 0): string {
   const d = new Date()
   d.setUTCHours(2, 0, 0, 0)
@@ -115,7 +115,7 @@ const pastOp = (kind: OperationKind, appId: string, startedBy: string, min: numb
   startedAt: minutesAgo(min), finishedAt: minutesAgo(min - 1),
 })
 const pastActivity: Operation[] = [
-  { ...pastOp('drill', 'notes-app', '', 690), startedBy: undefined }, // nightly, 03:00 UTC
+  { ...pastOp('drill', 'notes-app', '', 690), startedBy: undefined }, // nightly, 5:00 AM Beirut time
   pastOp('restore', 'notes-app', 'adam.alkhatib@example.com', 55),
   pastOp('backup', 'notes-app', 'jason.keyrouz@example.com', 70),
   pastOp('redeploy', 'shop-api', 'ahmad.marjeh@example.com', 180),

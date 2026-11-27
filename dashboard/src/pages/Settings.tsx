@@ -158,7 +158,7 @@ export function Settings() {
             <Item label="Region" value={<span className="font-mono text-[13px]">us-east-1</span>} />
             <Item label="Runtime" value="Node.js 20 on Amazon EKS" />
             <Item label="Database engine" value="PostgreSQL 16 on a shared RDS instance" />
-            <Item label="Backup schedule" value="Daily at 02:00 UTC" />
+            <Item label="Backup schedule" value="Daily at 4:00 AM Beirut time" />
             <Item label="Backup storage" value="Amazon S3, encrypted with AWS KMS" />
           </div>
         </Section>

@@ -134,7 +134,7 @@ export function Backups() {
               <CalendarClock className="size-5" />
             </div>
           </div>
-          <p className="mt-3 text-2xl font-semibold">Daily, 02:00 UTC</p>
+          <p className="mt-3 text-2xl font-semibold">Daily, 4:00 AM Beirut time</p>
           <p className="mt-3 text-sm text-slate-600">For every app with a PostgreSQL database</p>
         </Card>
       </div>
@@ -223,7 +223,7 @@ export function Backups() {
             </table>
           </div>
         ) : (
-          <EmptyState title="No backups yet">Scheduled backups run daily at 02:00 UTC.</EmptyState>
+          <EmptyState title="No backups yet">Scheduled backups run daily at 4:00 AM Beirut time.</EmptyState>
         )}
       </Card>
 

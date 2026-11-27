@@ -20,7 +20,7 @@ export function BackupButton({
   const op = useOperation(operationId, (finished) => {
     setOperationId(null)
     if (finished.status === 'succeeded') onDone()
-    else onError('The backup failed. Check the job logs in CloudWatch.')
+    else onError('The backup failed. The team was emailed; see the Activity page for details.')
   })
   const busy = operationId !== null
   const step = op?.steps.find((s) => s.state === 'running')
