@@ -54,8 +54,9 @@ export function Pipeline({ title, steps, op }: { title: string; steps: PipelineS
         <h3 className="text-[17px] font-semibold text-slate-900">{title}</h3>
         <span className={cx('rounded-full px-3 py-1 text-xs font-medium shadow-xs', label.cls)}>{label.text}</span>
       </div>
-      {/* As many columns as fit with readable text (one per row on a phone or in a narrow dialog). */}
-      <ol className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
+      {/* Dialogs are narrow: 2 and 4 steps fit as a 2 x N grid; 3 steps read better as a list than with one
+          box left alone on its own row. One per row on a phone. */}
+      <ol className={cx('grid gap-3', shown.length % 2 === 0 && 'sm:grid-cols-2')}>
         {shown.map((s) => (
           <li key={s.key} className="flex gap-3 rounded-lg bg-white p-3.5 shadow-xs">
             <StepIcon state={s.state} />
