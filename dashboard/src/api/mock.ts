@@ -124,7 +124,7 @@ const pastOp = (kind: OperationKind, appId: string, startedBy: string, min: numb
 })
 const restoreResult = (appId: string, seconds: number) => ({
   backupId: `bk-${appId}-0`, targetDatabase: `${appId.replace(/-/g, '_')}_restore_20261127`,
-  recoveryUrl: appUrl(`${appId}-recovery`), recordsChecked: 120, durationSeconds: seconds,
+  recoveryUrl: appUrl(`${appId}-recovery`), recordsChecked: 120, durationSeconds: seconds, contentChecked: true,
 })
 const pastActivity: Operation[] = [
   { ...pastOp('drill', 'notes-app', '', 690), startedBy: undefined, detail: { recordsChecked: 120, expectedRecords: 120, durationSeconds: 9 } },
@@ -372,7 +372,7 @@ export const mockApi: PlatformApi = {
       throw new Error(`a recovery drill of ${app.name} is already running`)
     return startOperation('drill', appId, (op) => {
       newest.verifiedAt = new Date().toISOString()
-      op.detail = { recordsChecked: 120, expectedRecords: 120, durationSeconds: 9 }
+      op.detail = { recordsChecked: 120, expectedRecords: 120, durationSeconds: 9, contentChecked: true }
     })
   },
 
@@ -449,7 +449,7 @@ export const mockApi: PlatformApi = {
     return startOperation('restore', app.id, (op) => {
       const durationSeconds = Math.round((Date.now() - op.startedMs) / 1000)
       const recordsChecked = app.id === 'shop-api' ? 3184 : 1240
-      op.result = { backupId, targetDatabase, recoveryUrl, recordsChecked, durationSeconds }
+      op.result = { backupId, targetDatabase, recoveryUrl, recordsChecked, durationSeconds, contentChecked: true }
       backup.verifiedAt = new Date().toISOString()
       restores = [{ id: op.id, appId: app.id, appName: app.name, startedAt: op.startedAt, ...op.result }, ...restores]
     })

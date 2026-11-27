@@ -98,6 +98,8 @@ export function createExecutor(config, run = runScript) {
             durationSeconds: r.durationSeconds,
             restoreSeconds: r.restoreSeconds,
             image: r.image,
+            contentChecked: r.contentChecked === true,
+            ...(r.contentNote && { contentNote: r.contentNote }),
           },
           logTail: res.logTail,
         }
@@ -183,6 +185,8 @@ export function createExecutor(config, run = runScript) {
           recordsChecked: r.recordsChecked,
           durationSeconds: Math.round((Date.now() - started) / 1000),
           restoreSeconds: r.durationSeconds,
+          contentChecked: r.contentChecked === true,
+          ...(r.contentNote && { contentNote: r.contentNote }),
         },
         logTail: res.logTail,
       }

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Download a backup from S3, create a NEW database, pg_restore into it, and verify the row count.
 # Never touches the live database: the target must not exist yet.
+# Content: when the backup carries a content fingerprint (backup.sh, databases up to 1 GB), the restored copy
+# must produce exactly the same one, so every value in every row is proven, not just the number of rows.
 # DROP_AFTER_CHECK=true (the nightly recovery drill) drops the new database again once it has been counted.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
@@ -19,6 +21,7 @@ meta="$(s3 s3api head-object --bucket "$S3_BUCKET" --key "$BACKUP_KEY" --query M
 expected_rows="$(jq -r '."row-count" // empty' <<<"$meta")"           # VERIFY_TABLE only (notes-app)
 expected_total="$(jq -r '."total-rows" // empty' <<<"$meta")"         # every table (any app)
 expected_tables="$(jq -r '."table-count" // empty' <<<"$meta")"
+expected_hash="$(jq -r '."content-hash" // empty' <<<"$meta")"
 image_tag="$(jq -r '."image-tag" // empty' <<<"$meta")"
 source_db="$(jq -r '.database // empty' <<<"$meta")"
 VERIFY_TABLE="${VERIFY_TABLE:-$(jq -r '."verify-table" // "notes"' <<<"$meta")}"
@@ -87,6 +90,26 @@ else
   fi
 fi
 
+content_checked=false
+content_note=""
+if [ -n "$expected_hash" ]; then
+  if [ "$status" = succeeded ]; then
+    fp_started=$(date +%s%N)
+    actual_hash="$(content_fingerprint "$target_url")"
+    log "content fingerprint $actual_hash, backup had $expected_hash ($(( ($(date +%s%N) - fp_started) / 1000000 )) ms)"
+    if [ "$actual_hash" = "$expected_hash" ]; then
+      content_checked=true
+    else
+      status=failed; reason="row contents differ from the backup (content fingerprint mismatch)"
+    fi
+  fi
+elif [ "$(jq -r '."content-check" // empty' <<<"$meta")" = skipped-size ]; then
+  content_note="content check skipped: database over the size limit; tables and rows counted"
+else
+  content_note="no content fingerprint in this backup (taken before content checks); tables and rows counted"
+fi
+[ -z "$content_note" ] || log "$content_note"
+
 dropped=false
 if [ "${DROP_AFTER_CHECK:-false}" = "true" ]; then
   STEP=cleanup
@@ -100,10 +123,13 @@ emit_result RESTORE_RESULT "$(jq -cn \
   --arg tag "$image_tag" --arg table "$VERIFY_TABLE" --argjson records "$records" \
   --arg expected "$expected" --argjson duration "$duration" --argjson dropped "$dropped" \
   --argjson tables "$tables" --arg tableRows "$table_rows" \
+  --argjson content "$content_checked" --arg contentNote "$content_note" \
   '{status: $status, backupKey: $key, targetDatabase: $db, imageTag: $tag, verifyTable: $table,
     recordsChecked: $records, expectedRecords: ($expected | if . == "" then null else tonumber end),
     tablesChecked: $tables, verifyTableRows: ($tableRows | if . == "" then null else tonumber end),
-    durationSeconds: $duration, dropped: $dropped} + (if $reason == "" then {} else {reason: $reason} end)')"
+    durationSeconds: $duration, dropped: $dropped, contentChecked: $content}
+   + (if $reason == "" then {} else {reason: $reason} end)
+   + (if $contentNote == "" then {} else {contentNote: $contentNote} end)')"
 
 [ "$status" = succeeded ] || die "verification failed: $reason"
 log "restore verified in ${duration}s"

@@ -95,6 +95,8 @@ export interface OperationDetail {
   recordsChecked?: number
   expectedRecords?: number | null
   durationSeconds?: number
+  contentChecked?: boolean
+  contentNote?: string
   imageTag?: string
   recordsRestored?: number
   beforeUndoBackupKey?: string
@@ -109,6 +111,8 @@ export interface RestoreResult {
   recoveryUrl: string
   recordsChecked: number
   durationSeconds: number
+  contentChecked?: boolean // every value in every row matched the backup, not only the counts
+  contentNote?: string // why content wasn't checked (database over 1 GB, or an older backup)
 }
 
 export interface Restore extends RestoreResult {

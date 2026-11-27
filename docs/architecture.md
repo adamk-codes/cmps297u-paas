@@ -65,6 +65,11 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
    (step `run`).
 4. Verify: count rows (e.g. `SELECT count(*) FROM notes`), compare with the count taken at backup time if
    available, hit the recovery URL's `/healthz`; record `recordsChecked` and `durationSeconds` (step `check`).
+   Content too: backups of databases up to 1 GB (`CONTENT_CHECK_MAX_BYTES`) store a fingerprint of every value
+   in every row (md5 per row, summed per table, any app); the restored copy must produce the same one, so a
+   changed value fails the check even when the row counts match. Counts, fingerprint and `pg_dump` read one
+   exported snapshot, so writes during a backup can't cause false failures. Larger databases skip the
+   fingerprint (one extra full read: measured ~1 s per 200 MB) and the result says so.
 5. Demo scenario: delete notes in the live app ("simulated deletion"), restore, show ≥ 100 records at the
    recovery URL, report recovery time.
 

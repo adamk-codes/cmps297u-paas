@@ -137,6 +137,7 @@ describe('restores', () => {
         recordsChecked: 120,
         durationSeconds: 48,
         restoreSeconds: 9,
+        contentChecked: true,
       },
     })
     await operations.idle()
@@ -149,6 +150,7 @@ describe('restores', () => {
       recoveryUrl: 'http://alb.example/apps/notes-app-recovery/',
       recordsChecked: 120,
       durationSeconds: 48,
+      contentChecked: true, // every value matched the backup's fingerprint
     })
 
     const restores = await get('/api/restores')
