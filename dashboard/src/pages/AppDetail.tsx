@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BadgeCheck, ExternalLink, GitCommitHorizontal, RotateCcw, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
-import { api, type Backup, type ImageVersion } from '../api'
+import { ArrowLeft, BadgeCheck, ExternalLink, GitCommitHorizontal, History, RotateCcw, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
+import { api, type App, type Backup, type ImageVersion, type Operation } from '../api'
 import { useAsync, useOperation } from '../lib/hooks'
-import { formatBytes, formatTime, formatUtc, shortDigest, timeAgo } from '../lib/format'
+import { formatBytes, formatTime, formatUtc, shortDigest, timeAgo, triggerLabel } from '../lib/format'
 import { BackupButton } from '../components/BackupButton'
 import { Modal } from '../components/Modal'
-import { DELETE_STEPS, DRILL_STEPS, Pipeline, REDEPLOY_STEPS } from '../components/Pipeline'
+import { DELETE_STEPS, DRILL_STEPS, Pipeline, REDEPLOY_STEPS, UNDO_STEPS } from '../components/Pipeline'
 import { RestoreModal } from '../components/RestoreModal'
 import {
   AppIconTile,
@@ -166,6 +166,212 @@ function DrillModal({ appId, appName, onClose, onChanged }: { appId: string; app
   )
 }
 
+// "Undo deploy": the previous version back, with the data as it was just before the deploy (or code only).
+function UndoDeployModal({ app, onClose, onChanged }: { app: App; onClose: () => void; onChanged: () => void }) {
+  // Kept from when the dialog opened: after the undo the app has no lastDeploy any more.
+  const [last] = useState(() => app.lastDeploy!)
+  const [mode, setMode] = useState<'data' | 'code'>('data')
+  const [operationId, setOperationId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const op = useOperation(operationId, () => onChanged())
+  const started = operationId !== null
+  const finished = op !== null && op.status !== 'running'
+  const since = formatUtc(last.deployedAt)
+
+  async function start() {
+    setError(null)
+    try {
+      const created =
+        mode === 'data' ? await api.undoDeploy(app.id, last.imageTag) : await api.redeploy(app.id, last.previousImageTag)
+      setOperationId(created.id)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const options = [
+    {
+      value: 'data' as const,
+      title: 'Undo code and data',
+      body: (
+        <>
+          {last.previousImageTag} comes back with the data exactly as it was just before the deploy. Anything users changed
+          since {since} is saved in a "Before undo" backup and the current database is kept, so nothing is deleted. The
+          app pauses for about a minute. Use this when the new version damaged data.
+        </>
+      ),
+    },
+    {
+      value: 'code' as const,
+      title: 'Undo code only',
+      body: (
+        <>
+          {last.previousImageTag} comes back and keeps all current data, including what users changed since the deploy. Use
+          this when the new version was buggy but the data is fine.
+        </>
+      ),
+    },
+  ]
+
+  return (
+    <Modal title="Undo last deploy" onClose={onClose} size="md">
+      <p className="text-[15px] text-slate-600">
+        <span className="font-mono font-semibold text-slate-900">{last.imageTag}</span> went live {since} (
+        {timeAgo(last.deployedAt)}). Rebound backed up <span className="font-medium text-slate-900">{app.name}</span>'s data
+        just before, so it can put back <span className="font-mono font-semibold text-slate-900">{last.previousImageTag}</span>.
+      </p>
+      {!started && (
+        <fieldset className="mt-4 space-y-2">
+          <legend className="sr-only">What to undo</legend>
+          {options.map((o) => (
+            <label
+              key={o.value}
+              className={cx(
+                'flex cursor-pointer gap-3 rounded-lg border p-3.5',
+                mode === o.value ? 'border-blue-500 bg-blue-50/60' : 'border-slate-200 hover:border-slate-300',
+              )}
+            >
+              <input
+                type="radio"
+                name="undo-mode"
+                className="mt-1 size-4 accent-blue-600"
+                checked={mode === o.value}
+                onChange={() => setMode(o.value)}
+              />
+              <span>
+                <span className="block text-sm font-medium text-slate-900">{o.title}</span>
+                <span className="mt-0.5 block text-sm text-slate-600">{o.body}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {error && (
+        <div className="mt-4">
+          <ErrorBanner message={error} />
+        </div>
+      )}
+      {op?.status === 'succeeded' && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <BadgeCheck className="mt-0.5 size-4 shrink-0" />
+          {op.kind === 'undo' ? (
+            <span>
+              {last.previousImageTag} is live again on the data from {since}
+              {op.detail?.downtimeSeconds != null && ` (paused ${op.detail.downtimeSeconds}s)`}. What users changed since is
+              in the "Before undo" backup on the{' '}
+              <Link to="/backups" className="font-medium underline">
+                Backups
+              </Link>{' '}
+              page{op.detail?.keptDatabase && <>, and the previous database is kept as <span className="font-mono">{op.detail.keptDatabase}</span></>}.
+            </span>
+          ) : (
+            <span>{last.previousImageTag} is live again. The data was not changed.</span>
+          )}
+        </div>
+      )}
+      {op?.status === 'failed' && (
+        <div className="mt-4">
+          <ErrorBanner
+            message={`${op.steps.find((s) => s.state === 'failed')?.label ?? 'A step'} failed. Nothing was deleted: the app keeps its current data, and the team was emailed.`}
+          />
+        </div>
+      )}
+      <div className="my-5 flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          {finished ? 'Close' : started ? 'Hide' : 'Cancel'}
+        </Button>
+        {!finished && (
+          <Button onClick={start} disabled={started}>
+            {started ? <Spinner /> : <History className="size-4" />}
+            {started ? 'Undoing…' : mode === 'data' ? 'Undo code and data' : 'Undo code only'}
+          </Button>
+        )}
+      </div>
+      {started && (
+        <Pipeline
+          title={mode === 'data' ? 'Undo deploy' : 'Rollback'}
+          steps={mode === 'data' ? UNDO_STEPS : REDEPLOY_STEPS}
+          op={op}
+        />
+      )}
+    </Modal>
+  )
+}
+
+// How old the data is: "6 hours", "25 min".
+function ageText(iso: string): string {
+  return timeAgo(iso).replace(/ ago$/, '').replace('just now', 'under a minute')
+}
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b)
+  return s.length % 2 ? s[(s.length - 1) / 2] : Math.round((s[s.length / 2 - 1] + s[s.length / 2]) / 2)
+}
+
+// Recovery scorecard: measured numbers for this app, not promises. How much data a failure right now could
+// lose (age of the newest backup), how long getting it back takes (real restores and drills), and the last test.
+function RecoveryScorecard({ appId, backups }: { appId: string; backups: Backup[] | null }) {
+  const ops = useAsync(() => api.listOperations(200), [appId, backups])
+  const newest = backups?.find((b) => b.status === 'completed')
+  const mine = (ops.data ?? []).filter((o) => o.appId === appId)
+  const timed = mine
+    .filter((o) => o.status === 'succeeded' && (o.kind === 'restore' || o.kind === 'drill'))
+    .map((o: Operation) => (o.kind === 'restore' ? o.result?.durationSeconds : o.detail?.durationSeconds))
+    .filter((s): s is number => typeof s === 'number')
+    .slice(0, 5)
+  const lastDrill = mine.find((o) => o.kind === 'drill' && o.status !== 'running')
+  const stale = newest ? Date.now() - Date.parse(newest.createdAt) > 26 * 3600_000 : true
+
+  const tiles: { label: string; value: string; note: string; tone: 'good' | 'warn' | 'none' }[] = [
+    {
+      label: 'Data you could lose',
+      value: newest ? `at most ${ageText(newest.createdAt)}` : 'everything',
+      note: newest ? `Newest backup: ${formatUtc(newest.createdAt)}` : 'No backup yet: take one now',
+      tone: newest && !stale ? 'good' : 'warn',
+    },
+    {
+      label: 'Time to get it back',
+      value: timed.length ? `about ${median(timed)}s` : 'not measured',
+      note: timed.length
+        ? `Median of the last ${timed.length} restore${timed.length === 1 ? '' : 's'} and drills (${Math.min(...timed)}–${Math.max(...timed)}s)`
+        : 'Run "Test latest" to measure it',
+      tone: timed.length ? 'good' : 'none',
+    },
+    {
+      label: 'Last recovery test',
+      value: !lastDrill ? 'never' : lastDrill.status === 'succeeded' ? 'passed' : 'failed',
+      note: lastDrill
+        ? `${lastDrill.startedBy ? 'Run by hand' : 'Nightly drill'}, ${timeAgo(lastDrill.startedAt)}`
+        : 'Runs every night at 5:00 AM Beirut time',
+      tone: !lastDrill ? 'none' : lastDrill.status === 'succeeded' ? 'good' : 'warn',
+    },
+  ]
+  return (
+    <Card className="mt-6 overflow-hidden">
+      <SectionTitle aside={<span className="text-sm text-slate-500">Measured on this app, not estimated</span>}>
+        Recovery scorecard
+      </SectionTitle>
+      <div className="grid gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-3">
+        {tiles.map((t) => (
+          <div key={t.label} className="bg-white px-5 py-4">
+            <p className="text-sm text-slate-500">{t.label}</p>
+            <p
+              className={cx(
+                'mt-1 text-2xl font-semibold',
+                t.tone === 'good' ? 'text-slate-900' : t.tone === 'warn' ? 'text-red-600' : 'text-slate-400',
+              )}
+            >
+              {ops.data || t.label === 'Data you could lose' ? t.value : '…'}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{t.note}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
 function DeleteAppModal({ appId, appName, onClose }: { appId: string; appName: string; onClose: () => void }) {
   const navigate = useNavigate()
   const [typed, setTyped] = useState('')
@@ -246,6 +452,7 @@ export function AppDetail() {
   const [restoreBackup, setRestoreBackup] = useState<Backup | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [drilling, setDrilling] = useState(false)
+  const [undoing, setUndoing] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
   const a = app.data
@@ -401,8 +608,23 @@ export function AppDetail() {
         </Card>
       </div>
 
+      {a.database && <RecoveryScorecard appId={a.id} backups={backups.data} />}
+
       <Card className="mt-6 overflow-hidden">
-        <SectionTitle aside={<span className="text-sm text-slate-500">Images stored in Amazon ECR</span>}>
+        <SectionTitle
+          aside={
+            a.lastDeploy && a.status === 'running' ? (
+              <span className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-slate-500">Data was backed up before {a.lastDeploy.imageTag} went live</span>
+                <Button variant="secondary" size="sm" onClick={() => setUndoing(true)}>
+                  <History className="size-3.5" /> Undo last deploy
+                </Button>
+              </span>
+            ) : (
+              <span className="text-sm text-slate-500">Images stored in Amazon ECR</span>
+            )
+          }
+        >
           Image history
         </SectionTitle>
         {a.history.length ? (
@@ -460,7 +682,7 @@ export function AppDetail() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900">{formatUtc(b.createdAt)}</p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                      <span className="capitalize">{b.trigger}</span>· {formatBytes(b.sizeBytes)} ·
+                      <span>{triggerLabel(b.trigger)}</span>· {formatBytes(b.sizeBytes)} ·
                       <span className="font-mono">{b.image.tag}</span>
                       {b.verifiedAt && (
                         <span className="flex items-center gap-1 text-recover-dark">
@@ -508,6 +730,7 @@ export function AppDetail() {
       {drilling && (
         <DrillModal appId={a.id} appName={a.name} onClose={() => setDrilling(false)} onChanged={() => backups.reload()} />
       )}
+      {undoing && <UndoDeployModal app={a} onClose={() => setUndoing(false)} onChanged={refresh} />}
       {deleting && <DeleteAppModal appId={a.id} appName={a.name} onClose={() => setDeleting(false)} />}
       {restoreBackup && (
         <RestoreModal backup={restoreBackup} onClose={() => setRestoreBackup(null)} onChanged={() => backups.reload()} />

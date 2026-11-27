@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { api, type App, type Backup } from '../api'
 import { useAsync } from '../lib/hooks'
-import { formatUtc, shortDigest, timeAgo } from '../lib/format'
+import { formatUtc, shortDigest, timeAgo, triggerLabel } from '../lib/format'
 import { DeployModal } from '../components/DeployModal'
 import {
   AppIconTile,
@@ -113,7 +113,7 @@ function Stats({ apps, backups }: { apps: App[]; backups: Backup[] }) {
               ) : (
                 <span>{latest.appName}</span>
               )}
-              · {latest.trigger === 'scheduled' ? 'Scheduled backup' : 'Manual backup'}
+              · {triggerLabel(latest.trigger)} backup
             </p>
           </>
         ) : (

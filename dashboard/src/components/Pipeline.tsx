@@ -54,7 +54,8 @@ export function Pipeline({ title, steps, op }: { title: string; steps: PipelineS
         <h3 className="text-[17px] font-semibold text-slate-900">{title}</h3>
         <span className={cx('rounded-full px-3 py-1 text-xs font-medium shadow-xs', label.cls)}>{label.text}</span>
       </div>
-      <ol className={cx('grid gap-3', shown.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+      {/* As many columns as fit with readable text (one per row on a phone or in a narrow dialog). */}
+      <ol className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-3">
         {shown.map((s) => (
           <li key={s.key} className="flex gap-3 rounded-lg bg-white p-3.5 shadow-xs">
             <StepIcon state={s.state} />
@@ -104,6 +105,14 @@ export const DELETE_STEPS: PipelineStep[] = [
 ]
 
 export const REDEPLOY_STEPS: PipelineStep[] = [
+  { key: 'snapshot', label: 'Safety backup', description: 'Data saved first, so the deploy can be undone', state: 'pending' },
   { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR', state: 'pending' },
   { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy', state: 'pending' },
+]
+
+export const UNDO_STEPS: PipelineStep[] = [
+  { key: 'restore', label: 'Restore', description: 'Data from just before the deploy, into a new database', state: 'pending' },
+  { key: 'save', label: 'Save', description: 'App paused; current data backed up, nothing deleted', state: 'pending' },
+  { key: 'switch', label: 'Switch', description: 'Previous version goes live on the restored data', state: 'pending' },
+  { key: 'check', label: 'Check', description: 'Pods healthy and the app answers', state: 'pending' },
 ]

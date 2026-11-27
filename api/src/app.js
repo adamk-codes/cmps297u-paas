@@ -13,6 +13,7 @@ import { HttpError } from './operations.js'
 //   getLogs(appId)        GET  /api/apps/:appId/logs
 //   redeploy(appId, tag)  POST /api/apps/:appId/redeploy {imageTag} -> 202 Operation
 //   deleteApp(appId)      DELETE /api/apps/:appId -> 202 Operation (backups are kept)
+//   undoDeploy(appId)     POST /api/apps/:appId/undo-deploy -> 202 Operation (previous version + its data)
 //   runDrill(appId)       POST /api/apps/:appId/drill -> 202 Operation (recovery drill on the newest backup)
 //   listApprovedRepos()   GET  /api/repos
 //   deploy(req)           POST /api/apps {repo, name, createDatabase} -> 202 Operation
@@ -83,6 +84,22 @@ export function createApp({ operations, apps, costs, config, verifier }) {
       throw new HttpError(400, `image ${tag} is not in ${target.id}'s history`)
     }
     const op = await operations.startRedeploy(target.id, tag, { idempotencyKey: idem(req), startedBy: who(req) })
+    res.status(202).location(`/api/operations/${op.id}`).json(op)
+  }))
+
+  // "Undo deploy", code and data: the version before the last deploy goes live again on the data from the
+  // safety backup taken just before that deploy. The current data is backed up first and its database kept.
+  // ("Code only" is a plain redeploy of lastDeploy.previousImageTag.)
+  app.post('/api/apps/:appId/undo-deploy', wrap(async (req, res) => {
+    const target = await findApp(req.params.appId)
+    const last = target.lastDeploy
+    if (!last) throw new HttpError(409, `${target.id}'s last deploy has no safety backup, so it can't be undone with its data`)
+    if (req.body?.imageTag && req.body.imageTag !== last.imageTag) {
+      throw new HttpError(409, `${target.id} was deployed again since; reload and try again`)
+    }
+    const op = await operations.startUndo(target.id, {
+      backupId: last.safetyBackupId, imageTag: last.previousImageTag, idempotencyKey: idem(req), startedBy: who(req),
+    })
     res.status(202).location(`/api/operations/${op.id}`).json(op)
   }))
 

@@ -10,6 +10,7 @@ export const STEP_TEMPLATES = {
     { key: 'check', label: 'Check', description: 'Records verified, recovery time measured' },
   ],
   redeploy: [
+    { key: 'snapshot', label: 'Safety backup', description: 'Data saved first, so the deploy can be undone' },
     { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR' },
     { key: 'release', label: 'Release', description: 'Rolled out on EKS' },
   ],
@@ -24,6 +25,12 @@ export const STEP_TEMPLATES = {
     { key: 'check', label: 'Check', description: 'Every table and row checked against the backup' },
     { key: 'cleanup', label: 'Clean up', description: 'Temporary database dropped; live app untouched' },
   ],
+  undo: [
+    { key: 'restore', label: 'Restore', description: 'Data from just before the deploy, into a new database' },
+    { key: 'save', label: 'Save', description: 'App paused; current data backed up, nothing deleted' },
+    { key: 'switch', label: 'Switch', description: 'Previous version goes live on the restored data' },
+    { key: 'check', label: 'Check', description: 'Pods healthy and the app answers' },
+  ],
   delete: [
     { key: 'stop', label: 'Stop', description: 'App, recovery copy and daily backup removed' },
     { key: 'database', label: 'Database', description: 'Database and login dropped; backups kept in S3' },
@@ -36,9 +43,10 @@ export const STEP_TEMPLATES = {
 const STEP_ALIASES = {
   backup: { dump: 'dump', store: 'store' },
   restore: { download: 'restore', restore: 'restore', run: 'run', check: 'check' },
-  redeploy: { pull: 'pull', release: 'release' },
+  redeploy: { snapshot: 'snapshot', pull: 'pull', release: 'release' }, // deploy-app.sh
   deploy: { test: 'test', build: 'build', store: 'store', release: 'release' }, // deploy-new-app.sh
   delete: { stop: 'stop', database: 'database' }, // rebound-data.sh delete
+  undo: { restore: 'restore', save: 'save', switch: 'switch', check: 'check' }, // rebound-data.sh undo
   drill: { download: 'restore', restore: 'restore', check: 'check', cleanup: 'cleanup' }, // rebound-data.sh drill, restore.sh
 }
 

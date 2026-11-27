@@ -1,4 +1,4 @@
-# One manual backup: pg_dump -> s3://$S3_BUCKET/backups/<app>/<timestamp>-<imageTag>.dump (SSE-KMS).
+# One on-demand backup (manual, or the safety backup of "Undo deploy"): pg_dump -> s3://$S3_BUCKET/backups/<app>/<timestamp>-<imageTag>.dump (SSE-KMS).
 # Rendered and started by rebound-data.sh backup <app>.
 apiVersion: batch/v1
 kind: Job
@@ -28,6 +28,7 @@ spec:
           env:
             - { name: APP_NAME, value: "${APP_NAME}" }
             - { name: IMAGE_TAG, value: "${IMAGE_TAG}" }
+            - { name: BACKUP_TRIGGER, value: "${BACKUP_TRIGGER}" } # manual | pre-undo
             - { name: S3_BUCKET, value: "${S3_BUCKET}" }
             - { name: S3_KMS_KEY_ID, value: "${S3_KMS_KEY_ID}" }
             - { name: AWS_REGION, value: "${AWS_REGION}" }

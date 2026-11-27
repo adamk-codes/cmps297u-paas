@@ -19,6 +19,9 @@ export function parseBackupFileName(name) {
   return { createdAt: `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`, tag: m[7] }
 }
 
+// scheduled: daily CronJob; pre-deploy: safety backup before a new version; pre-undo: data saved by "Undo deploy"
+const TRIGGERS = new Set(['manual', 'scheduled', 'pre-deploy', 'pre-undo'])
+
 // Reads the backup catalog straight from S3 (the source of truth); metadata written by backup.sh.
 export class S3Catalog {
   constructor({ bucket, prefix, endpoint, region }, client) {
@@ -72,7 +75,7 @@ export class S3Catalog {
       appId,
       appName: meta.app || appId,
       createdAt: parsed.createdAt ?? new Date(object.LastModified).toISOString(),
-      trigger: meta.trigger === 'scheduled' ? 'scheduled' : 'manual',
+      trigger: TRIGGERS.has(meta.trigger) ? meta.trigger : 'manual',
       status: 'completed',
       sizeBytes: Number(object.Size ?? 0),
       image: { tag: meta['image-tag'] || parsed.tag || 'unknown', digest: meta['image-digest'] || '' },

@@ -66,6 +66,8 @@ let apps: App[] = [
     ],
     database: { engine: 'PostgreSQL', version: '16.3', name: 'shop_api' },
     lastBackupAt: lastScheduledRun(),
+    // v2.14.0 replaced v2.13.1 95 min ago; the data was backed up just before (see the pre-deploy backup below).
+    lastDeploy: { imageTag: 'v2.14.0', deployedAt: minutesAgo(95), previousImageTag: 'v2.13.1', safetyBackupId: 'bk-shop-api-predeploy' },
   },
   {
     id: 'notes-app',
@@ -107,6 +109,12 @@ let backups: Backup[] = [
   ),
 ]
 
+backups.unshift({
+  id: 'bk-shop-api-predeploy', appId: 'shop-api', appName: 'shop-api', createdAt: minutesAgo(96), trigger: 'pre-deploy',
+  status: 'completed', sizeBytes: 18_510_000, image: { tag: 'v2.13.1', digest: 'sha256:51be09d4a7c3' },
+  s3Key: 'backups/shop-api/pre-deploy.dump',
+})
+
 let restores: Restore[] = []
 
 // A little history so the Activity page isn't empty in mock mode.
@@ -114,9 +122,16 @@ const pastOp = (kind: OperationKind, appId: string, startedBy: string, min: numb
   id: `op-${randomHex(12)}`, kind, appId, status, startedBy, steps: [],
   startedAt: minutesAgo(min), finishedAt: minutesAgo(min - 1),
 })
+const restoreResult = (appId: string, seconds: number) => ({
+  backupId: `bk-${appId}-0`, targetDatabase: `${appId.replace(/-/g, '_')}_restore_20261127`,
+  recoveryUrl: appUrl(`${appId}-recovery`), recordsChecked: 120, durationSeconds: seconds,
+})
 const pastActivity: Operation[] = [
-  { ...pastOp('drill', 'notes-app', '', 690), startedBy: undefined }, // nightly, 5:00 AM Beirut time
-  pastOp('restore', 'notes-app', 'adam.alkhatib@example.com', 55),
+  { ...pastOp('drill', 'notes-app', '', 690), startedBy: undefined, detail: { recordsChecked: 120, expectedRecords: 120, durationSeconds: 9 } },
+  { ...pastOp('drill', 'shop-api', '', 692), startedBy: undefined, detail: { recordsChecked: 4210, expectedRecords: 4210, durationSeconds: 14 } },
+  { ...pastOp('drill', 'shop-api', '', 692 + 1440), startedBy: undefined, detail: { recordsChecked: 4180, expectedRecords: 4180, durationSeconds: 13 } },
+  { ...pastOp('restore', 'notes-app', 'adam.alkhatib@example.com', 55), result: restoreResult('notes-app', 38) },
+  { ...pastOp('restore', 'shop-api', 'jason.keyrouz@example.com', 60 * 30), result: restoreResult('shop-api', 47) },
   pastOp('backup', 'notes-app', 'jason.keyrouz@example.com', 70),
   pastOp('redeploy', 'shop-api', 'ahmad.marjeh@example.com', 180),
   pastOp('deploy', 'shop-api', 'abdulrahman.kaddoura@example.com', 600, 'failed'),
@@ -138,8 +153,15 @@ const STEP_TEMPLATES: Record<OperationKind, Omit<PipelineStep, 'state'>[]> = {
     { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy' },
   ],
   redeploy: [
+    { key: 'snapshot', label: 'Safety backup', description: 'Data saved first, so the deploy can be undone' },
     { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR' },
     { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy' },
+  ],
+  undo: [
+    { key: 'restore', label: 'Restore', description: 'Data from just before the deploy, into a new database' },
+    { key: 'save', label: 'Save', description: 'App paused; current data backed up, nothing deleted' },
+    { key: 'switch', label: 'Switch', description: 'Previous version goes live on the restored data' },
+    { key: 'check', label: 'Check', description: 'Pods healthy and the app answers' },
   ],
   drill: [
     { key: 'restore', label: 'Restore', description: 'Latest backup into a temporary database' },
@@ -221,6 +243,18 @@ function publicOp(op: MockOperation): Operation {
   return clone(rest)
 }
 
+function addBackup(app: App, trigger: Backup['trigger']): Backup {
+  const createdAt = new Date().toISOString()
+  const b: Backup = {
+    id: `bk-${randomHex(8)}`, appId: app.id, appName: app.name, createdAt, trigger, status: 'completed',
+    sizeBytes: app.id === 'shop-api' ? 18_620_000 : 6_340_000, image: { tag: app.image.tag, digest: app.image.digest },
+    s3Key: `backups/${app.id}/${createdAt.replace(/[:.]/g, '-')}-${app.image.tag}.dump`,
+  }
+  backups = [b, ...backups]
+  app.lastBackupAt = createdAt
+  return b
+}
+
 function findApp(id: string): App {
   const app = apps.find((a) => a.id === id)
   if (!app) throw new Error(`App "${id}" was not found`)
@@ -297,8 +331,35 @@ export const mockApi: PlatformApi = {
     app.status = 'deploying'
     return startOperation('redeploy', appId, () => {
       const deployed = { ...target, deployedAt: new Date().toISOString() }
+      // Safety backup of the version that was live, so this deploy can be undone with its data.
+      const safety = app.database && app.image.tag !== tag ? addBackup(app, 'pre-deploy') : undefined
+      app.lastDeploy = safety
+        ? { imageTag: tag, deployedAt: deployed.deployedAt, previousImageTag: app.image.tag, safetyBackupId: safety.id }
+        : undefined
       Object.assign(app, { status: 'running', health: 'healthy', image: deployed })
       app.history = [deployed, ...app.history.filter((h) => h.tag !== tag)]
+    })
+  },
+
+  async undoDeploy(appId, imageTag) {
+    await delay()
+    const app = findApp(appId)
+    const last = app.lastDeploy
+    if (!last) throw new Error(`${app.name}'s last deploy has no safety backup, so it can't be undone with its data`)
+    if (last.imageTag !== imageTag) throw new Error(`${app.name} was deployed again since; reload and try again`)
+    if ([...operations.values()].some((o) => o.appId === appId && o.status === 'running'))
+      throw new Error(`${app.name} has an operation in progress; wait for it to finish`)
+    app.status = 'deploying'
+    return startOperation('undo', appId, (op) => {
+      const saved = addBackup(app, 'pre-undo')
+      const previous = app.history.find((h) => h.tag === last.previousImageTag) ?? { ...app.image, tag: last.previousImageTag }
+      const deployed = { ...previous, deployedAt: new Date().toISOString() }
+      Object.assign(app, { status: 'running', health: 'healthy', image: deployed, lastDeploy: undefined })
+      app.history = [deployed, ...app.history.filter((h) => h.tag !== deployed.tag)]
+      op.detail = {
+        imageTag: deployed.tag, recordsRestored: 4210, beforeUndoBackupKey: saved.s3Key, downtimeSeconds: 41, durationSeconds: 74,
+        keptDatabase: `${app.database?.name ?? app.id}_undo_${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`,
+      }
     })
   },
 

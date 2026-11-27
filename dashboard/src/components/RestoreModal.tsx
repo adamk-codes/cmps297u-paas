@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { BadgeCheck, Database, ExternalLink, GitCommitHorizontal, Info, RotateCcw } from 'lucide-react'
 import { api, type Backup } from '../api'
 import { useOperation } from '../lib/hooks'
-import { formatDuration, formatUtc, shortDigest } from '../lib/format'
+import { formatDuration, formatUtc, shortDigest, triggerLabel } from '../lib/format'
 import { Modal } from './Modal'
 import { Pipeline, RESTORE_STEPS } from './Pipeline'
 import { Button, CopyButton, ErrorBanner, Spinner } from './ui'
@@ -57,7 +57,7 @@ export function RestoreModal({
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <Fact label="Backup">
           <p>{formatUtc(backup.createdAt)}</p>
-          <p className="mt-0.5 text-xs text-slate-500 capitalize">{backup.trigger}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{triggerLabel(backup.trigger)}</p>
         </Fact>
         <Fact label="App image">
           <p className="flex items-center gap-1.5 font-mono text-[13px]">

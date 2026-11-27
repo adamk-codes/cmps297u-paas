@@ -94,7 +94,7 @@ test('redeploy passes the requested tag and a handled failure is saved before de
   const saved = await ops.get(op.id)
   assert.equal(saved.status, 'failed')
   assert.equal(saved.error, 'rollout failed')
-  assert.deepEqual(saved.steps.map((s) => s.state), ['succeeded', 'failed'])
+  assert.deepEqual(saved.steps.map((s) => s.state), ['succeeded', 'succeeded', 'failed'])
   assert.deepEqual(deleted, ['handled', 'again'])
 })
 
@@ -169,7 +169,7 @@ test('a deploy redelivered after a lost acknowledgement keeps its original resul
   const done = await ops.get(op.id)
   assert.equal(done.status, 'succeeded')
   assert.deepEqual(done.detail, detail)
-  assert.deepEqual(done.steps.map((s) => s.key), ['pull', 'release'])
+  assert.deepEqual(done.steps.map((s) => s.key), ['snapshot', 'pull', 'release'])
   deps.queue.delete = async () => {}
   await processDelivery({ message: sent[0], receipt: 'retry' }, deps)
   assert.equal(rollouts, 1)

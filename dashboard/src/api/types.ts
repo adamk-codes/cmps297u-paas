@@ -35,9 +35,19 @@ export interface App {
   history: ImageVersion[] // newest first, includes the current image
   database?: AppDatabase
   lastBackupAt?: string
+  lastDeploy?: LastDeploy // set when the current version can be undone together with its data
 }
 
-export type BackupTrigger = 'manual' | 'scheduled'
+// "Undo deploy": the data was backed up just before the current version went live.
+export interface LastDeploy {
+  imageTag: string // the version that is live now
+  deployedAt: string
+  previousImageTag: string // the version it replaced
+  safetyBackupId: string // backup taken just before the deploy (trigger "pre-deploy")
+}
+
+// pre-deploy: safety backup before a new version; pre-undo: the data "Undo deploy" saved before switching
+export type BackupTrigger = 'manual' | 'scheduled' | 'pre-deploy' | 'pre-undo'
 export type BackupStatus = 'running' | 'completed' | 'failed'
 
 export interface Backup {
@@ -62,7 +72,7 @@ export interface PipelineStep {
   state: StepState
 }
 
-export type OperationKind = 'deploy' | 'redeploy' | 'backup' | 'restore' | 'delete' | 'drill'
+export type OperationKind = 'deploy' | 'redeploy' | 'backup' | 'restore' | 'delete' | 'drill' | 'undo'
 export type OperationStatus = 'running' | 'succeeded' | 'failed'
 
 // Long-running work (deploys, backups, restores) is started with a POST that returns an
@@ -77,7 +87,20 @@ export interface Operation {
   finishedAt?: string
   result?: RestoreResult
   startedBy?: string // email of the team member who started it (activity log)
-  detail?: { recordsChecked?: number; expectedRecords?: number | null; durationSeconds?: number } // drill result
+  detail?: OperationDetail
+}
+
+// Extra results by kind: drill (records, duration), undo (what was kept), redeploy (its safety backup).
+export interface OperationDetail {
+  recordsChecked?: number
+  expectedRecords?: number | null
+  durationSeconds?: number
+  imageTag?: string
+  recordsRestored?: number
+  beforeUndoBackupKey?: string
+  keptDatabase?: string
+  downtimeSeconds?: number
+  safetyBackupKey?: string
 }
 
 export interface RestoreResult {

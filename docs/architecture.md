@@ -68,6 +68,24 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
 5. Demo scenario: delete notes in the live app ("simulated deletion"), restore, show ≥ 100 records at the
    recovery URL, report recovery time.
 
+### Undo deploy (code and data)
+
+Render-style platforms roll back code only. Rebound can also roll back the data that a bad release damaged:
+
+1. Every deploy of a new version over a running app with a database first takes a **safety backup**
+   (`deploy/deploy-app.sh`, trigger `pre-deploy`, labelled with the version that was live). The Deployment
+   records it (`rebound.io/safety-backup`, `rebound.io/previous-image-tag`); the dashboard shows "Undo last
+   deploy". If the safety backup fails, the new version is not released. Applies to CI, dashboard and up.sh deploys.
+2. "Undo code only" is a plain redeploy of the previous version; the data stays as it is.
+3. "Undo code and data" (`POST /api/apps/:id/undo-deploy`, `rebound-data.sh undo`):
+   restore the safety backup into a new database and verify it, like any restore, while the app keeps running
+   (step `restore`); pause the app and back up the current data, trigger `pre-undo` (step `save`); rename the
+   live database to `<appdb>_undo_<stamp>` and the restored copy to `<appdb>` in one transaction, release the
+   previous version and start the app (step `switch`, `swap.sh`); check the rollout and `/healthz` (step `check`).
+4. Nothing is deleted: what users changed after the deploy is in the "Before undo" backup (restorable to the
+   recovery URL like any backup) and in the kept database. "Delete app" drops the kept databases too.
+   Trade-off: the app pauses for about a minute (backup + rename + start), so the saved data is complete.
+
 ## Naming conventions
 
 | Thing | Format | Example |
@@ -76,6 +94,7 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
 | Recovery path | `/apps/<name>-recovery` | `/apps/notes-app-recovery` |
 | App database | `<name>` with `-` → `_` | `notes_app` |
 | Restored database | `<appdb>_restore_<YYYYMMDDHHMMSS>` | `notes_app_restore_20261124183005` |
+| Database set aside by Undo deploy | `<appdb>_undo_<YYYYMMDDHHMMSS>` | `notes_app_undo_20261127150100` |
 | Backup key | `backups/<app>/<timestamp>-<imageTag>.dump` | `backups/notes-app/20261124T183000Z-3f9c2ab.dump` |
 | Timestamp in keys | UTC, `YYYYMMDDTHHMMSSZ` (no `:` so it's S3/shell safe) | `20261124T183000Z` |
 

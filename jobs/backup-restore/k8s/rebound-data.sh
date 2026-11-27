@@ -14,6 +14,7 @@
 #   rebound-data.sh cleanup-recovery <app>        remove the recovery app
 #   rebound-data.sh delete <app>                  remove the app, its recovery copy and database (backups kept)
 #   rebound-data.sh drill <app> [key|latest]      recovery drill: restore into a temp DB, count rows, drop it
+#   rebound-data.sh undo <app> <key> <image>      undo a deploy: <image> back live on the data in backup <key>
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +24,9 @@ ENV_FILE="${REBOUND_ENV:-$HERE/.env}"
 
 : "${NAMESPACE:=apps}" "${AWS_REGION:=us-east-1}" "${ALB_GROUP:=rebound}" "${MIN_ROWS:=100}"
 : "${BACKUP_SCHEDULE:=0 2 * * *}" "${S3_KMS_KEY_ID:=}" "${SECRETS_KMS_KEY_ID:=}" "${DB_PORT:=5432}" "${DROP_AFTER_CHECK:=false}"
+: "${BACKUP_TRIGGER:=manual}" "${KEEP_AS:=}"
 export NAMESPACE AWS_REGION ALB_GROUP MIN_ROWS BACKUP_SCHEDULE S3_KMS_KEY_ID SECRETS_KMS_KEY_ID DROP_AFTER_CHECK
+export BACKUP_TRIGGER KEEP_AS
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
@@ -32,7 +35,8 @@ k() { kubectl -n "$NAMESPACE" "$@"; }
 
 TEMPLATE_VARS='${NAMESPACE} ${JOB_NAME} ${OPERATION_ID} ${APP_NAME} ${DB_NAME} ${IMAGE_TAG} ${JOBS_IMAGE}
 ${APP_IMAGE} ${S3_BUCKET} ${S3_KMS_KEY_ID} ${SECRETS_KMS_KEY_ID} ${AWS_REGION} ${BACKUP_KEY} ${TARGET_DB}
-${MIN_ROWS} ${OTHER_DATABASE} ${ALB_GROUP} ${BACKUP_SCHEDULE} ${DATA_JOBS_ROLE_ARN} ${DROP_AFTER_CHECK}'
+${MIN_ROWS} ${OTHER_DATABASE} ${ALB_GROUP} ${BACKUP_SCHEDULE} ${DATA_JOBS_ROLE_ARN} ${DROP_AFTER_CHECK}
+${BACKUP_TRIGGER} ${KEEP_AS}'
 render() { envsubst "$TEMPLATE_VARS" < "$HERE/$1"; }
 apply() { render "$1" | kubectl apply -f - >&2; }
 
@@ -128,7 +132,7 @@ cmd_backup() {
   log "operation $OPERATION_ID: backing up $APP_NAME (image $IMAGE_TAG)"
   apply backup-job.yaml
   wait_job "$JOB_NAME" 900 || die "backup failed"
-  echo "BACKUP_RESULT $(job_result "$JOB_NAME" BACKUP_RESULT | jq -c --arg op "$OPERATION_ID" '. + {operationId: $op, trigger: "manual"}')"
+  echo "BACKUP_RESULT $(job_result "$JOB_NAME" BACKUP_RESULT | jq -c --arg op "$OPERATION_ID" '. + {operationId: $op, trigger: env.BACKUP_TRIGGER}')"
 }
 
 cmd_schedule() {
@@ -279,6 +283,79 @@ cmd_delete() {
   echo "DELETE_RESULT $(jq -c --arg op "$OPERATION_ID" --arg app "$APP_NAME" '. + {operationId: $op, app: $app}' <<<"$r")"
 }
 
+# Undo a deploy: the previous image back live, on the data from the safety backup taken just before
+# that deploy (deploy-app.sh). Nothing is deleted on the way:
+#   1 restore  the safety backup into a NEW database, verified like any restore (app still live)
+#   2 save     stop the app, back up the data as it is now ("before undo": what users did since the deploy)
+#   3 switch   rename the live database aside (<db>_undo_<ts>, kept), the restored copy takes its name,
+#              release <image> (no new safety backup) and start the app again
+#   4 check    rollout healthy and /healthz answers
+# If anything fails before the switch, the app is started again on its untouched database.
+cmd_undo() {
+  set_app "${1:-}"; need JOBS_IMAGE S3_BUCKET
+  local key="${2:?usage: undo <app> <backup-key> <image>}" image="${3:?usage: undo <app> <backup-key> <image>}"
+  local started active result replicas current_tag saved_key keep stopped_at downtime total records deploy_script
+  started=$(date +%s)
+  deploy_script="${DEPLOY_SCRIPT:-$HERE/../../../deploy/deploy-app.sh}"
+  [ -f "$deploy_script" ] || die "deploy script not found at $deploy_script (set DEPLOY_SCRIPT)"
+  case "$key" in "backups/$APP_NAME/"*.dump) ;; *) die "$key is not a backup of $APP_NAME" ;; esac
+  k get deploy "$APP_NAME" >/dev/null || die "app $APP_NAME is not deployed"
+  active="$(k get jobs -l rebound.io/kind=restore -o jsonpath='{range .items[*]}{.status.active}{end}')"
+  [ -z "${active//0/}" ] || die "a restore is already running; restores run one at a time"
+
+  log "::step restore"
+  export BACKUP_KEY="$key" DROP_AFTER_CHECK=false
+  export TARGET_DB="${DB_NAME:0:40}_restore_$(date -u +%Y%m%d%H%M%S)"
+  new_operation restore
+  local undo_id="$OPERATION_ID"
+  log "undo $OPERATION_ID: restoring $BACKUP_KEY into $TARGET_DB (the live app keeps running)"
+  apply restore-job.yaml
+  wait_job "$JOB_NAME" 1200 || die "restoring the safety backup failed (nothing was changed)"
+  result="$(job_result "$JOB_NAME" RESTORE_RESULT)"
+  [ "$(jq -r .status <<<"$result")" = succeeded ] || die "the safety backup did not verify (nothing was changed)"
+  records="$(jq -r .recordsChecked <<<"$result")"
+
+  log "::step save"
+  replicas="$(k get deploy "$APP_NAME" -o jsonpath='{.spec.replicas}')"; [ "${replicas:-0}" -gt 0 ] || replicas=1
+  current_tag="$(k get deploy "$APP_NAME" -o jsonpath='{.spec.template.spec.containers[0].image}' | sed -n 's/.*:\([^:/]*\)$/\1/p')"
+  restart() { log "starting $APP_NAME again on its own database"; k scale deploy "$APP_NAME" --replicas="$replicas" >&2 || true; }
+  log "stopping $APP_NAME so nothing changes while its data is saved and switched"
+  k scale deploy "$APP_NAME" --replicas=0 >&2
+  stopped_at=$(date +%s)
+  k wait --for=delete pod -l "app.kubernetes.io/name=$APP_NAME" --timeout=120s >&2 || true
+  export IMAGE_TAG="${current_tag:-unknown}" BACKUP_TRIGGER=pre-undo
+  new_operation backup
+  apply backup-job.yaml
+  if ! wait_job "$JOB_NAME" 900; then restart; die "could not save the current data first (nothing was changed)"; fi
+  saved_key="$(job_result "$JOB_NAME" BACKUP_RESULT | jq -r .s3Key)"
+  log "current data saved as $saved_key"
+
+  log "::step switch"
+  export KEEP_AS="${DB_NAME:0:40}_undo_$(date -u +%Y%m%d%H%M%S)"
+  keep="$KEEP_AS"
+  new_operation swap
+  apply swap-job.yaml
+  if ! wait_job "$JOB_NAME" 120; then restart; die "switching databases failed (live database unchanged)"; fi
+  # Release the previous image while stopped; SAFETY_BACKUP=off: the "before undo" backup was just taken.
+  SAFETY_BACKUP=off "$deploy_script" "$APP_NAME" "$image" >&2 \
+    || { restart; die "releasing $image failed (data switched; previous data kept in $keep)"; }
+  k scale deploy "$APP_NAME" --replicas="$replicas" >&2
+
+  log "::step check"
+  k rollout status "deploy/$APP_NAME" --timeout=300s >&2 || die "$APP_NAME did not become ready on the restored data"
+  downtime=$(( $(date +%s) - stopped_at ))
+  k exec "deploy/$APP_NAME" -- wget -qO- "http://127.0.0.1:3000/apps/$APP_NAME/healthz" >/dev/null \
+    || die "$APP_NAME is running but its /healthz fails"
+  total=$(( $(date +%s) - started ))
+  log "UNDO DONE: $image is live on the data from $key; previous data kept in $keep and $saved_key"
+  echo "UNDO_RESULT $(jq -cn --arg op "$undo_id" --arg app "$APP_NAME" --arg image "$image" --arg key "$key" \
+    --arg saved "$saved_key" --arg kept "$keep" --argjson records "$records" --argjson down "$downtime" \
+    --argjson total "$total" \
+    '{operationId: $op, status: "succeeded", app: $app, image: $image, imageTag: ($image | split(":") | last),
+      restoredFrom: $key, recordsRestored: $records, beforeUndoBackupKey: $saved, keptDatabase: $kept,
+      downtimeSeconds: $down, durationSeconds: $total}')"
+}
+
 case "${1:-help}" in
   bootstrap) shift; cmd_bootstrap "$@" ;;
   push-image) shift; cmd_push_image "$@" ;;
@@ -291,5 +368,6 @@ case "${1:-help}" in
   cleanup-recovery) shift; cmd_cleanup_recovery "$@" ;;
   delete) shift; cmd_delete "$@" ;;
   drill) shift; cmd_drill "$@" ;;
-  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' ;;
+  undo) shift; cmd_undo "$@" ;;
+  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

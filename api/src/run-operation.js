@@ -28,8 +28,13 @@ async function execute(op, message, { executor, catalog }, onStep, backup) {
   if (kind === 'redeploy') {
     const outcome = await executor.redeploy({ appId, imageTag: message.imageTag, onStep })
     if (!outcome.ok) return outcome
-    const { image, imageTag } = outcome.result
-    return { ok: true, detail: { image, imageTag } }
+    const { image, imageTag, safetyBackupKey, previousImageTag } = outcome.result
+    return {
+      ok: true,
+      detail: { image, imageTag, ...(safetyBackupKey && { safetyBackupKey, previousImageTag }) },
+      // Same version again, or an app without a database: say so instead of showing a backup that wasn't taken.
+      ...(!safetyBackupKey && { stepNotes: { snapshot: 'Not needed: no data changes with this release' } }),
+    }
   }
   if (kind === 'deploy') {
     const outcome = await executor.deploy({ appId, sourceApp: message.sourceApp, repo: message.repo, onStep })
@@ -46,6 +51,17 @@ async function execute(op, message, { executor, catalog }, onStep, backup) {
     return {
       ok: true,
       detail: { backupId: op.backupId, backupKey: backup.s3Key, recordsChecked, expectedRecords, durationSeconds, targetDatabase, dropped },
+    }
+  }
+  if (kind === 'undo') {
+    backup ??= await catalog.get(op.backupId)
+    if (!backup) return { ok: false, error: `backup ${op.backupId} was not found` }
+    const outcome = await executor.undo({ appId, backup, imageTag: message.imageTag, onStep })
+    if (!outcome.ok) return outcome
+    const { image, imageTag, recordsRestored, beforeUndoBackupKey, keptDatabase, downtimeSeconds, durationSeconds } = outcome.result
+    return {
+      ok: true,
+      detail: { image, imageTag, restoredFrom: backup.s3Key, recordsRestored, beforeUndoBackupKey, keptDatabase, downtimeSeconds, durationSeconds },
     }
   }
   if (kind === 'delete') {
@@ -81,8 +97,9 @@ export async function runOperation(op, message, deps, { backup, retryUnexpected 
   }
   let patch
   if (outcome.ok) {
-    const { detail, result } = outcome
-    patch = { status: 'succeeded', steps: finishSteps(steps, true), finishedAt: now().toISOString(), detail }
+    const { detail, result, stepNotes = {} } = outcome
+    const finished = finishSteps(steps, true).map((s) => (stepNotes[s.key] ? { ...s, description: stepNotes[s.key] } : s))
+    patch = { status: 'succeeded', steps: finished, finishedAt: now().toISOString(), detail }
     if (result) patch.result = result
   } else {
     log.error(`operation ${op.id} (${op.kind} ${op.appId}) failed: ${outcome.error}`)
