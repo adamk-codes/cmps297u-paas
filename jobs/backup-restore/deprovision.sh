@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Remove an app's database, its restored copies and its login from the shared PostgreSQL server, and its
 # credentials from Secrets Manager. Backups in S3 are NOT touched, so the app's data can still be restored.
-#   database = role = APP_NAME with '-' -> '_'; restored copies are <db>_restore_<14 digits> (restore.sh)
+#   database = role = APP_NAME with '-' -> '_'; restored copies are <db>_restore_<14 digits> (restore.sh),
+#   databases set aside by "Undo deploy" are <db>_undo_<14 digits> (swap.sh)
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
@@ -14,10 +15,10 @@ case "$name" in rebound_*|postgres|rdsadmin|template*) die "refusing to remove p
 STEP=database
 admin() { psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -qtA "$@"; }
 
-# Exact names only: deleting "notes" must never touch "notes_app" or "notes_app_restore_...".
+# Exact names only: deleting "notes" must never touch "notes_app", "notes_app_restore_..." or "notes_app_undo_...".
 # (Query first, then split: a failed query must stop the script, which a process substitution would hide.)
 found="$(admin -c "SELECT datname FROM pg_database
-  WHERE datname = '$name' OR datname ~ '^${name:0:40}_restore_[0-9]{14}\$' ORDER BY datname")"
+  WHERE datname = '$name' OR datname ~ '^${name:0:40}_(restore|undo)_[0-9]{14}\$' ORDER BY datname")"
 mapfile -t dbs <<<"$found"
 for db in "${dbs[@]}"; do
   [ -n "$db" ] || continue

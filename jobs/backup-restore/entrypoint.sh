@@ -7,6 +7,7 @@ case "${1:-help}" in
   restore) shift; exec "$DIR/restore.sh" "$@" ;;
   provision) shift; exec "$DIR/provision.sh" "$@" ;;
   deprovision) shift; exec "$DIR/deprovision.sh" "$@" ;;
+  swap) shift; exec "$DIR/swap.sh" "$@" ;;
   isolation-check) shift; exec "$DIR/isolation-check.sh" "$@" ;;
   help|-h|--help)
     cat <<'EOF'
@@ -20,6 +21,8 @@ rebound backup-restore
                    as backups/<APP_NAME>/<timestamp>-<IMAGE_TAG>.dump
   restore          download BACKUP_KEY, create a NEW database, pg_restore into it,
                    and verify the row count
+  swap             "Undo deploy": rename the live database aside (kept) and put a
+                   restored copy in its place
   isolation-check  prove DATABASE_URL's login cannot open OTHER_DATABASE
 
 See jobs/backup-restore/README.md for the environment variables.

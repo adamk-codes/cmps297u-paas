@@ -1,3 +1,4 @@
+import { backupIdFromKey } from './catalog.js'
 import { runCapture } from './runner.js'
 
 // Read model for deployed apps, in the dashboard's App shape (dashboard/src/api/types.ts).
@@ -88,6 +89,13 @@ export function appsFromKube(list, { publicUrl = '', region = '', pgVersion = '1
         deployedAt: d.metadata.creationTimestamp,
       }
 
+      // "Undo deploy": deploy-app.sh records the safety backup taken just before this version went live.
+      const safetyKey = ann['rebound.io/safety-backup'] ?? ''
+      const previousTag = ann['rebound.io/previous-image-tag'] ?? ''
+      const lastDeploy = safetyKey && previousTag && previousTag !== currentTag
+        ? { imageTag: currentTag, deployedAt: image.deployedAt, previousImageTag: previousTag, safetyBackupId: backupIdFromKey(safetyKey) }
+        : undefined
+
       const desired = d.spec?.replicas ?? 1
       const ready = d.status?.readyReplicas ?? 0
       return {
@@ -106,6 +114,7 @@ export function appsFromKube(list, { publicUrl = '', region = '', pgVersion = '1
         image,
         history: history.length ? history : [image],
         database: { engine: 'PostgreSQL', version: pgVersion, name: id.replaceAll('-', '_') },
+        ...(lastDeploy && { lastDeploy }),
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))

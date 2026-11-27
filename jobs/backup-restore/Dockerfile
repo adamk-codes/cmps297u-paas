@@ -5,7 +5,7 @@ FROM postgres:${PG_MAJOR}-alpine
 
 RUN apk add --no-cache aws-cli jq bash coreutils
 
-COPY lib.sh backup.sh restore.sh provision.sh deprovision.sh isolation-check.sh entrypoint.sh /usr/local/bin/rebound/
+COPY lib.sh backup.sh restore.sh provision.sh deprovision.sh swap.sh isolation-check.sh entrypoint.sh /usr/local/bin/rebound/
 RUN chmod +x /usr/local/bin/rebound/*.sh
 
 # Run as the unprivileged postgres user; dumps go to /tmp.

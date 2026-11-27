@@ -30,7 +30,7 @@ rules:
     verbs: [get, create, patch, update, delete]
   - apiGroups: [""]
     resources: [pods]
-    verbs: [get, list]
+    verbs: [get, list, watch]         # watch: "Undo deploy" waits for the app's pods to stop
   - apiGroups: [""]
     resources: [pods/log]
     verbs: [get]
@@ -46,6 +46,9 @@ rules:
   - apiGroups: [apps]
     resources: [deployments]
     verbs: [get, list, watch, create, patch, update, delete]
+  - apiGroups: [apps]
+    resources: [deployments/scale]    # "Undo deploy" pauses the app while its data is saved and switched
+    verbs: [get, patch, update]
   - apiGroups: [apps]
     resources: [replicasets]          # kubectl rollout status
     verbs: [get, list, watch]

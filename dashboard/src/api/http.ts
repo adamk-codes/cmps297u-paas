@@ -65,6 +65,7 @@ export function createHttpApi(baseUrl: string, getToken: () => Promise<string | 
     listApprovedRepos: () => request<ApprovedRepo[]>('GET', '/api/repos'),
     deploy: (req: DeployRequest) => request<Operation>('POST', '/api/apps', req),
     redeploy: (appId, imageTag) => request<Operation>('POST', `/api/apps/${id(appId)}/redeploy`, { imageTag }),
+    undoDeploy: (appId, imageTag) => request<Operation>('POST', `/api/apps/${id(appId)}/undo-deploy`, { imageTag }),
     runDrill: (appId) => request<Operation>('POST', `/api/apps/${id(appId)}/drill`),
     deleteApp: (appId) => request<Operation>('DELETE', `/api/apps/${id(appId)}`),
     listOperations: (limit = 100) => request<Operation[]>('GET', `/api/operations?limit=${limit}`),

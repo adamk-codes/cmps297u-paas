@@ -1,0 +1,38 @@
+# "Undo deploy": rename the live database aside (kept) and put the restored copy in its place.
+# Run by rebound-data.sh undo while the app is scaled to 0.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${NAMESPACE}
+  labels: &labels
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: swap
+    rebound.io/app: ${APP_NAME}
+    rebound.io/operation-id: ${OPERATION_ID}
+spec:
+  backoffLimit: 0                  # never retried: the API decides
+  activeDeadlineSeconds: 120
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: rebound-data-jobs
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 70, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: swap
+          image: ${JOBS_IMAGE}
+          args: ["swap"]
+          env:
+            - { name: APP_NAME, value: "${APP_NAME}" }
+            - { name: RESTORED_DB, value: "${TARGET_DB}" }
+            - { name: KEEP_AS, value: "${KEEP_AS}" }
+            - { name: AWS_REGION, value: "${AWS_REGION}" }
+            - name: ADMIN_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: rebound-db-admin, key: ADMIN_DATABASE_URL } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

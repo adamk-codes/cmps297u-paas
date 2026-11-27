@@ -74,6 +74,25 @@ export class Operations {
     return this.start('drill', appId, { idempotencyKey, backupId: backup.id, startedBy }, backup)
   }
 
+  // "Undo deploy": the previous version back live on the data from the safety backup taken just before
+  // the deploy. The caller checks the app's lastDeploy and that the backup exists.
+  async startUndo(appId, { backupId, imageTag, idempotencyKey, startedBy } = {}) {
+    if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(imageTag ?? '')) throw new HttpError(400, 'invalid image tag')
+    validateKey(idempotencyKey)
+    if (idempotencyKey) {
+      const existing = await this.store.findByIdempotencyKey(idempotencyKey)
+      if (existing) return existing
+    }
+    const busy = await this.store.list({ appId, status: 'running' })
+    if (busy.length) {
+      throw new HttpError(409, `${appId} has an operation in progress; wait for it to finish`, { operationId: busy[0].id })
+    }
+    const backup = await this.catalog.get(backupId)
+    if (!backup || backup.appId !== appId) throw new HttpError(404, `the safety backup of ${appId}'s last deploy was not found`)
+    return this.start('undo', appId, { idempotencyKey, backupId, imageTag, startedBy }, backup)
+  }
+
   // "Delete app". The caller checks the app exists and isn't protected.
   async startDelete(appId, { idempotencyKey, startedBy } = {}) {
     if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app id')
@@ -109,6 +128,7 @@ export class Operations {
         : kind === 'deploy' ? `${appId} is already being deployed`
         : kind === 'delete' ? `${appId} is already being deleted`
         : kind === 'drill' ? `a recovery drill of ${appId} is already running`
+        : kind === 'undo' ? `the last deploy of ${appId} is already being undone`
         : `a rollout of ${appId} is already running`
       throw new HttpError(409, reason, { operationId: saved.id })
     }

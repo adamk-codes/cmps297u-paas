@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Archive, CalendarClock, DatabaseBackup, Rocket, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
+import { Archive, CalendarClock, DatabaseBackup, History, Rocket, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { api, type Backup, type Operation, type OperationKind } from '../api'
 import { useAsync } from '../lib/hooks'
 import { formatUtc, timeAgo } from '../lib/format'
@@ -28,6 +28,7 @@ const ACTIONS: Record<OperationKind, { verb: string; icon: ReactNode }> = {
   restore: { verb: 'restored', icon: <DatabaseBackup className="size-4" /> },
   delete: { verb: 'deleted', icon: <Trash2 className="size-4" /> },
   drill: { verb: 'tested the latest backup of', icon: <ShieldCheck className="size-4" /> },
+  undo: { verb: 'undid the last deploy (code and data) of', icon: <History className="size-4" /> },
 }
 
 const nameOf = (email: string) =>

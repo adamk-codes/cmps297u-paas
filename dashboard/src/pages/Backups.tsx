@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { BadgeCheck, CalendarClock, ChevronDown, Database, GitCommitHorizontal, RotateCcw, ShieldCheck, Timer } from 'lucide-react'
 import { api, type Backup } from '../api'
 import { useAsync } from '../lib/hooks'
-import { formatBytes, formatDuration, formatUtc, shortDigest, timeAgo } from '../lib/format'
+import { formatBytes, formatDuration, formatUtc, shortDigest, timeAgo, triggerLabel } from '../lib/format'
 import { BackupButton } from '../components/BackupButton'
 import { RestoreModal } from '../components/RestoreModal'
 import { Button, Card, Chip, CopyButton, CountBadge, cx, EmptyState, ErrorBanner, PageHeader, Spinner } from '../components/ui'
@@ -193,7 +193,7 @@ export function Backups() {
                       </Link>
                     </td>
                     <td className="px-3 py-3.5">
-                      <Chip className="capitalize">{b.trigger}</Chip>
+                      <Chip>{triggerLabel(b.trigger)}</Chip>
                     </td>
                     <td className="px-3 py-3.5">
                       <span className="inline-flex items-center gap-2 font-mono text-[13px]">

@@ -24,6 +24,9 @@ export interface PlatformApi {
   redeploy(appId: string, imageTag: string): Promise<Operation>
   // Recovery drill: restore the newest backup into a temporary database, count, drop. Also runs nightly.
   runDrill(appId: string): Promise<Operation>
+  // Undo the last deploy, code and data: the previous version goes live again on the data from just before
+  // the deploy (the current data is backed up first). "Code only" is redeploy(appId, previousImageTag).
+  undoDeploy(appId: string, imageTag: string): Promise<Operation>
   // Removes the app, its recovery copy and its database. Its backups stay in S3.
   deleteApp(appId: string): Promise<Operation>
   getOperation(id: string): Promise<Operation>

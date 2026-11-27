@@ -1,7 +1,9 @@
 # Generic Rebound app: Deployment + Service + Ingress (path /apps/<app> on the shared ALB) + HPA.
 # Rendered by deploy/deploy-app.sh (or the CI pipeline) with envsubst:
 #   APP_NAME, APP_IMAGE, IMAGE_TAG, NAMESPACE, ALB_GROUP, MIN_REPLICAS, MAX_REPLICAS, CPU_TARGET,
-#   APP_REPO, APP_DESCRIPTION, APP_ICON (display metadata for the dashboard)
+#   APP_REPO, APP_DESCRIPTION, APP_ICON (display metadata for the dashboard),
+#   SAFETY_BACKUP_KEY, PREVIOUS_TAG ("Undo deploy": the backup taken just before this version, and the version
+#   it replaced; empty when there is nothing to undo)
 # The app reads DATABASE_URL from Secret <app>-db (created by `rebound-data.sh provision <app>`).
 apiVersion: apps/v1
 kind: Deployment
@@ -19,6 +21,8 @@ metadata:
     rebound.io/description: "${APP_DESCRIPTION}"
     rebound.io/icon: "${APP_ICON}"
     rebound.io/runtime: "Node.js 20"
+    rebound.io/safety-backup: "${SAFETY_BACKUP_KEY}"
+    rebound.io/previous-image-tag: "${PREVIOUS_TAG}"
 spec:
   revisionHistoryLimit: 10
   selector:

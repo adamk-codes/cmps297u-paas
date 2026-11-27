@@ -54,6 +54,20 @@ export function createExecutor(config, run = runScript) {
         const r = res.results.DRILL_RESULT
         return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'drill failed')
       },
+      // "Undo deploy": previous image live again on the data from the safety backup (rebound-data.sh undo).
+      async undo({ appId, backup, imageTag, onStep }) {
+        if (!config.ecrRegistry) return { ok: false, error: 'ECR_REGISTRY is not set', logTail: [] }
+        const image = `${config.ecrRegistry}/${appId}:${imageTag}`
+        const res = await run({
+          command: 'bash',
+          args: [runner, 'undo', appId, backup.s3Key, image],
+          env: { ...s3Env(), DEPLOY_SCRIPT: config.deployScript },
+          timeoutMs,
+          onStep,
+        })
+        const r = res.results.UNDO_RESULT
+        return res.code === 0 && r ? { ok: true, result: r, logTail: res.logTail } : fail(res, 'undo failed')
+      },
       // "Delete app": cluster resources, then database + login (rebound-data.sh delete). Backups stay in S3.
       async delete({ appId, onStep }) {
         const res = await run({ command: 'bash', args: [runner, 'delete', appId], env: {}, timeoutMs, onStep })
@@ -98,6 +112,9 @@ export function createExecutor(config, run = runScript) {
     },
     async deploy() {
       return { ok: false, error: 'new deploys run on the cluster (EXECUTOR=kubernetes)', logTail: [] }
+    },
+    async undo() {
+      return { ok: false, error: 'undoing a deploy runs on the cluster (EXECUTOR=kubernetes)', logTail: [] }
     },
     async delete() {
       return { ok: false, error: 'deleting apps runs on the cluster (EXECUTOR=kubernetes)', logTail: [] }

@@ -122,7 +122,7 @@ test('app routes: list with last backup, redeploy only known images, deploy reje
     const res = await post('/api/apps/notes-app/redeploy', { imageTag: '3f9c2ab' })
     assert.equal(res.status, 202)
     const op = await res.json()
-    assert.deepEqual(op.steps.map((s) => s.key), ['pull', 'release'])
+    assert.deepEqual(op.steps.map((s) => s.key), ['snapshot', 'pull', 'release'])
     await operations.idle()
     assert.equal((await (await fetch(`${base}/api/operations/${op.id}`)).json()).status, 'succeeded')
     assert.equal(redeploys[0].imageTag, '3f9c2ab')

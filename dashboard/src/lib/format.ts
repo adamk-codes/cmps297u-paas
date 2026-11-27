@@ -51,6 +51,16 @@ export function formatBytes(bytes: number): string {
   return `${v.toFixed(1)} ${units[i]}`
 }
 
+const TRIGGER_LABELS: Record<string, string> = {
+  manual: 'Manual',
+  scheduled: 'Scheduled',
+  'pre-deploy': 'Before deploy',
+  'pre-undo': 'Before undo',
+}
+export function triggerLabel(trigger: string): string {
+  return TRIGGER_LABELS[trigger] ?? trigger
+}
+
 export function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
