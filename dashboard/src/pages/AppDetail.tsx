@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, BadgeCheck, ExternalLink, GitCommitHorizontal, RotateCcw, Undo2 } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, BadgeCheck, ExternalLink, GitCommitHorizontal, RotateCcw, ShieldCheck, Trash2, Undo2 } from 'lucide-react'
 import { api, type Backup, type ImageVersion } from '../api'
 import { useAsync, useOperation } from '../lib/hooks'
 import { formatBytes, formatTime, formatUtc, shortDigest, timeAgo } from '../lib/format'
 import { BackupButton } from '../components/BackupButton'
 import { Modal } from '../components/Modal'
-import { Pipeline, REDEPLOY_STEPS } from '../components/Pipeline'
+import { DELETE_STEPS, DRILL_STEPS, Pipeline, REDEPLOY_STEPS } from '../components/Pipeline'
 import { RestoreModal } from '../components/RestoreModal'
 import {
   AppIconTile,
@@ -105,6 +105,138 @@ function RedeployModal({
   )
 }
 
+function DrillModal({ appId, appName, onClose, onChanged }: { appId: string; appName: string; onClose: () => void; onChanged: () => void }) {
+  const [operationId, setOperationId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const op = useOperation(operationId, () => onChanged())
+  const started = operationId !== null
+  const finished = op !== null && op.status !== 'running'
+  const d = op?.detail
+
+  async function start() {
+    setError(null)
+    try {
+      setOperationId((await api.runDrill(appId)).id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  return (
+    <Modal title="Test the latest backup" onClose={onClose} size="md">
+      <p className="text-[15px] text-slate-600">
+        A recovery drill restores <span className="font-medium text-slate-900">{appName}</span>'s newest backup into a
+        temporary database, checks that every table came back with exactly the rows the backup had, then
+        deletes the copy. It works for any app, whatever its tables. The live app is never touched.
+        Rebound runs this by itself every night at 03:00 UTC.
+      </p>
+      {error && (
+        <div className="mt-4">
+          <ErrorBanner message={error} />
+        </div>
+      )}
+      {op?.status === 'succeeded' && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <BadgeCheck className="mt-0.5 size-4 shrink-0" />
+          <span>
+            Backup verified: {d?.recordsChecked ?? '?'}
+            {d?.expectedRecords != null && ` of ${d.expectedRecords}`} rows restored and checked
+            {d?.durationSeconds != null && ` in ${d.durationSeconds}s`}. The temporary copy was deleted.
+          </span>
+        </div>
+      )}
+      {op?.status === 'failed' && (
+        <div className="mt-4">
+          <ErrorBanner message="The drill failed: this backup may not restore correctly. The team was emailed; take a new backup now." />
+        </div>
+      )}
+      <div className="my-5 flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>
+          {finished ? 'Close' : started ? 'Hide' : 'Cancel'}
+        </Button>
+        {!finished && (
+          <Button variant="recover" onClick={start} disabled={started}>
+            {started ? <Spinner /> : <ShieldCheck className="size-4" />}
+            {started ? 'Testing…' : 'Run drill'}
+          </Button>
+        )}
+      </div>
+      {started && <Pipeline title="Recovery drill" steps={DRILL_STEPS} op={op} />}
+    </Modal>
+  )
+}
+
+function DeleteAppModal({ appId, appName, onClose }: { appId: string; appName: string; onClose: () => void }) {
+  const navigate = useNavigate()
+  const [typed, setTyped] = useState('')
+  const [operationId, setOperationId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const op = useOperation(operationId)
+  const started = operationId !== null
+  const finished = op !== null && op.status !== 'running'
+
+  async function start() {
+    setError(null)
+    try {
+      const created = await api.deleteApp(appId)
+      setOperationId(created.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  return (
+    <Modal title={`Delete ${appName}`} onClose={onClose} size="md">
+      <p className="text-[15px] text-slate-600">
+        This stops <span className="font-medium text-slate-900">{appName}</span>, removes its recovery copy and daily backup,
+        and drops its database and login. <span className="font-medium text-slate-900">Its backups stay in S3</span>, so the
+        data can still be restored later.
+      </p>
+      {!started && (
+        <label className="mt-4 block text-sm text-slate-700">
+          Type <span className="font-mono font-semibold">{appName}</span> to confirm
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoComplete="off"
+            className="mt-1.5 h-11 w-full rounded-lg border border-slate-300 px-3 font-mono text-sm focus:border-red-500 focus:outline-none"
+          />
+        </label>
+      )}
+      {error && (
+        <div className="mt-4">
+          <ErrorBanner message={error} />
+        </div>
+      )}
+      {op?.status === 'failed' && (
+        <div className="mt-4">
+          <ErrorBanner
+            message={`${op.steps.find((s) => s.state === 'failed')?.label ?? 'A step'} failed. Its backups are untouched; try again or check the API logs.`}
+          />
+        </div>
+      )}
+      <div className="my-5 flex justify-end gap-2">
+        {op?.status === 'succeeded' ? (
+          <Button onClick={() => navigate('/apps')}>Back to apps</Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              {finished ? 'Close' : started ? 'Hide' : 'Cancel'}
+            </Button>
+            {!finished && (
+              <Button variant="danger" onClick={start} disabled={started || typed !== appName}>
+                {started ? <Spinner /> : <Trash2 className="size-4" />}
+                {started ? 'Deleting…' : 'Delete app'}
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+      {started && <Pipeline title="Delete" steps={DELETE_STEPS} op={op} />}
+    </Modal>
+  )
+}
+
 export function AppDetail() {
   const { appId = '' } = useParams()
   const app = useAsync(() => api.getApp(appId), [appId])
@@ -112,6 +244,8 @@ export function AppDetail() {
   const logs = useAsync(() => api.getLogs(appId), [appId])
   const [redeployImage, setRedeployImage] = useState<ImageVersion | null>(null)
   const [restoreBackup, setRestoreBackup] = useState<Backup | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [drilling, setDrilling] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
   const a = app.data
@@ -179,6 +313,9 @@ export function AppDetail() {
             >
               Open app <ExternalLink className="size-4" />
             </a>
+            <Button variant="secondary" size="lg" onClick={() => setDeleting(true)} aria-label={`Delete ${a.name}`}>
+              <Trash2 className="size-4 text-red-600" /> Delete
+            </Button>
           </>
         }
       >
@@ -300,9 +437,16 @@ export function AppDetail() {
         <Card className="overflow-hidden">
           <SectionTitle
             aside={
-              <Link to="/backups" className="text-sm font-medium text-blue-700 hover:text-blue-800">
-                All backups
-              </Link>
+              <span className="flex items-center gap-3">
+                {a.database && !!backups.data?.some((b) => b.status === 'completed') && (
+                  <Button variant="secondary" size="sm" onClick={() => setDrilling(true)}>
+                    <ShieldCheck className="size-3.5 text-recover-dark" /> Test latest
+                  </Button>
+                )}
+                <Link to="/backups" className="text-sm font-medium text-blue-700 hover:text-blue-800">
+                  All backups
+                </Link>
+              </span>
             }
           >
             Backups
@@ -361,6 +505,10 @@ export function AppDetail() {
           onChanged={refresh}
         />
       )}
+      {drilling && (
+        <DrillModal appId={a.id} appName={a.name} onClose={() => setDrilling(false)} onChanged={() => backups.reload()} />
+      )}
+      {deleting && <DeleteAppModal appId={a.id} appName={a.name} onClose={() => setDeleting(false)} />}
       {restoreBackup && (
         <RestoreModal backup={restoreBackup} onClose={() => setRestoreBackup(null)} onChanged={() => backups.reload()} />
       )}

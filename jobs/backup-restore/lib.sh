@@ -53,6 +53,16 @@ count_rows() {
   psql "$url" -v ON_ERROR_STOP=1 -tAc "SELECT count(*) FROM $table"
 }
 
+# Works for any app: exact row count of EVERY table in the database (all schemas except the system
+# ones), printed as "<tables> <rows>". Used to check a restore brought back everything the backup had.
+count_all_rows() {
+  psql "$1" -v ON_ERROR_STOP=1 -tA -F ' ' -c "
+    SELECT count(*), coalesce(sum((xpath('/row/c/text()',
+             query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, tablename), false, true, '')
+           ))[1]::text::bigint), 0)
+    FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
+}
+
 # The last line of a job's log is machine-readable, so the platform API can read the result.
 emit_result() {
   local marker="$1" json="$2"

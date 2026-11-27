@@ -34,6 +34,12 @@ variable "budget_alert_emails" {
   default     = []
 }
 
+variable "alert_emails" {
+  description = "Who gets failure alerts (failed operations, dead letters, stuck queue). Empty = budget_alert_emails."
+  type        = list(string)
+  default     = []
+}
+
 variable "github_repository" {
   description = "owner/repo allowed to assume the CI role through GitHub OIDC (pushes to ECR, deploys to EKS)."
   type        = string

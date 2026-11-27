@@ -32,6 +32,7 @@ spec:
             - { name: S3_BUCKET, value: "${S3_BUCKET}" }
             - { name: AWS_REGION, value: "${AWS_REGION}" }
             - { name: MIN_ROWS, value: "${MIN_ROWS}" }
+            - { name: DROP_AFTER_CHECK, value: "${DROP_AFTER_CHECK}" } # true for the nightly drill
             - name: ADMIN_DATABASE_URL
               valueFrom: { secretKeyRef: { name: rebound-db-admin, key: ADMIN_DATABASE_URL } }
           resources:

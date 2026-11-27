@@ -24,6 +24,12 @@
       "Resource": "arn:aws:s3:::BACKUP_BUCKET/backups/*"
     },
     {
+      "Sid": "FailureAlerts",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "arn:aws:sns:REGION:ACCOUNT_ID:rebound-alerts"
+    },
+    {
       "Sid": "NewAppImages",
       "Effect": "Allow",
       "Action": ["ecr:DescribeImages", "ecr:DescribeImageScanFindings"],

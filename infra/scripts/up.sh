@@ -39,6 +39,14 @@ if ! QUEUE_URL="$(tf_out foundation operations_queue_url 2>/dev/null)"; then
     -target=aws_sqs_queue.operations_dlq -target=aws_sqs_queue.operations
   QUEUE_URL="$(tf_out foundation operations_queue_url)"
 fi
+# Same for the failure alerts (SNS topic + CloudWatch alarms), so the API can be told the topic ARN.
+if ! ALERTS_TOPIC_ARN="$(tf_out foundation alerts_topic_arn 2>/dev/null)"; then
+  step "Adding the failure alerts to the existing foundation"
+  terraform -chdir="$INFRA/foundation" apply -input=false $APPROVE \
+    -target=aws_sns_topic.alerts -target=aws_sns_topic_subscription.alert_email \
+    -target=aws_cloudwatch_metric_alarm.operations_dlq -target=aws_cloudwatch_metric_alarm.operations_stuck
+  ALERTS_TOPIC_ARN="$(tf_out foundation alerts_topic_arn)"
+fi
 cat > "$INFRA/backend.hcl" <<EOF
 bucket       = "$(tf_out foundation tfstate_bucket)"
 region       = "$REGION"
@@ -67,6 +75,7 @@ JOBS_IMAGE=$ECR_REGISTRY/rebound/backup-restore:$TAG
 APP_IMAGE_REPO=
 S3_BUCKET=$BUCKET
 QUEUE_URL=$QUEUE_URL
+ALERTS_TOPIC_ARN=$ALERTS_TOPIC_ARN
 S3_KMS_KEY_ID=$KMS_ARN
 SECRETS_KMS_KEY_ID=$KMS_ARN
 DATA_JOBS_ROLE_ARN=$(tf_out cluster data_jobs_role_arn)

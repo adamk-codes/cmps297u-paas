@@ -62,7 +62,7 @@ export interface PipelineStep {
   state: StepState
 }
 
-export type OperationKind = 'deploy' | 'redeploy' | 'backup' | 'restore'
+export type OperationKind = 'deploy' | 'redeploy' | 'backup' | 'restore' | 'delete' | 'drill'
 export type OperationStatus = 'running' | 'succeeded' | 'failed'
 
 // Long-running work (deploys, backups, restores) is started with a POST that returns an
@@ -76,6 +76,8 @@ export interface Operation {
   startedAt: string
   finishedAt?: string
   result?: RestoreResult
+  startedBy?: string // email of the team member who started it (activity log)
+  detail?: { recordsChecked?: number; expectedRecords?: number | null; durationSeconds?: number } // drill result
 }
 
 export interface RestoreResult {

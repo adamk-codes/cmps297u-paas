@@ -1,0 +1,37 @@
+# Drop the app's database, restored copies and login, and delete its Secrets Manager entry
+# (rebound/apps/<app>/db). Backups in S3 are kept. Run by rebound-data.sh delete.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${NAMESPACE}
+  labels: &labels
+    app.kubernetes.io/part-of: rebound
+    rebound.io/kind: deprovision
+    rebound.io/app: ${APP_NAME}
+    rebound.io/operation-id: ${OPERATION_ID}
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      serviceAccountName: rebound-data-jobs
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 70, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: deprovision
+          image: ${JOBS_IMAGE}
+          args: ["deprovision"]
+          env:
+            - { name: APP_NAME, value: "${APP_NAME}" }
+            - { name: SECRET_ID, value: "rebound/apps/${APP_NAME}/db" }
+            - { name: AWS_REGION, value: "${AWS_REGION}" }
+            - name: ADMIN_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: rebound-db-admin, key: ADMIN_DATABASE_URL } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

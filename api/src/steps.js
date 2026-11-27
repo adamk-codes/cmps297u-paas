@@ -19,6 +19,15 @@ export const STEP_TEMPLATES = {
     { key: 'store', label: 'Database', description: 'Own PostgreSQL database and login' },
     { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy' },
   ],
+  drill: [
+    { key: 'restore', label: 'Restore', description: 'Latest backup into a temporary database' },
+    { key: 'check', label: 'Check', description: 'Every table and row checked against the backup' },
+    { key: 'cleanup', label: 'Clean up', description: 'Temporary database dropped; live app untouched' },
+  ],
+  delete: [
+    { key: 'stop', label: 'Stop', description: 'App, recovery copy and daily backup removed' },
+    { key: 'database', label: 'Database', description: 'Database and login dropped; backups kept in S3' },
+  ],
 }
 
 // Script log step names -> dashboard step keys.
@@ -29,6 +38,8 @@ const STEP_ALIASES = {
   restore: { download: 'restore', restore: 'restore', run: 'run', check: 'check' },
   redeploy: { pull: 'pull', release: 'release' },
   deploy: { test: 'test', build: 'build', store: 'store', release: 'release' }, // deploy-new-app.sh
+  delete: { stop: 'stop', database: 'database' }, // rebound-data.sh delete
+  drill: { download: 'restore', restore: 'restore', check: 'check', cleanup: 'cleanup' }, // rebound-data.sh drill, restore.sh
 }
 
 export function stepKeyFor(kind, logStep) {

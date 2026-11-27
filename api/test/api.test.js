@@ -229,4 +229,20 @@ describe('cognito auth', () => {
       assert.equal((await fetch(`${url}/api/backups`, { headers: { Authorization: 'Bearer nope' } })).status, 401)
     })
   })
+
+  test('the activity log records who started each operation, newest first', async () => {
+    const people = { jason: 'jason@team.test', adam: 'adam@team.test' }
+    const verifier = { verify: async (t) => ({ sub: t, email: people[t] }) }
+    await withApp(verifier, async (url) => {
+      const as = (who) => ({ method: 'POST', headers: { Authorization: `Bearer ${who}` } })
+      const first = await (await fetch(`${url}/api/apps/notes-app/backups`, as('jason'))).json()
+      assert.equal(first.startedBy, 'jason@team.test')
+      await new Promise((r) => setTimeout(r, 5))
+      await fetch(`${url}/api/backups/${BACKUP_ID}/restore`, as('adam'))
+      const list = await (await fetch(`${url}/api/operations?limit=10`, { headers: { Authorization: 'Bearer adam' } })).json()
+      assert.deepEqual(list.map((o) => [o.kind, o.startedBy]), [['restore', 'adam@team.test'], ['backup', 'jason@team.test']])
+      const one = await (await fetch(`${url}/api/operations?limit=1`, { headers: { Authorization: 'Bearer adam' } })).json()
+      assert.equal(one.length, 1)
+    })
+  })
 })

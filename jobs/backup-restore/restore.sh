@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Download a backup from S3, create a NEW database, pg_restore into it, and verify the row count.
 # Never touches the live database: the target must not exist yet.
+# DROP_AFTER_CHECK=true (the nightly recovery drill) drops the new database again once it has been counted.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
@@ -15,7 +16,9 @@ STEP=download
 log "reading s3://$S3_BUCKET/$BACKUP_KEY"
 meta="$(s3 s3api head-object --bucket "$S3_BUCKET" --key "$BACKUP_KEY" --query Metadata --output json)" \
   || die "backup s3://$S3_BUCKET/$BACKUP_KEY not found"
-expected_rows="$(jq -r '."row-count" // empty' <<<"$meta")"
+expected_rows="$(jq -r '."row-count" // empty' <<<"$meta")"           # VERIFY_TABLE only (notes-app)
+expected_total="$(jq -r '."total-rows" // empty' <<<"$meta")"         # every table (any app)
+expected_tables="$(jq -r '."table-count" // empty' <<<"$meta")"
 image_tag="$(jq -r '."image-tag" // empty' <<<"$meta")"
 source_db="$(jq -r '.database // empty' <<<"$meta")"
 VERIFY_TABLE="${VERIFY_TABLE:-$(jq -r '."verify-table" // "notes"' <<<"$meta")}"
@@ -59,24 +62,48 @@ if ! pg_restore --no-owner --no-acl --exit-on-error ${TARGET_OWNER:+--role="$TAR
 fi
 
 STEP=check
-records="$(count_rows "$target_url" "$VERIFY_TABLE")"
-log "$VERIFY_TABLE has $records rows in $TARGET_DB${expected_rows:+ (backup had $expected_rows)}"
+# Any app: every table must come back with exactly the rows the backup had. Backups taken before
+# table-count/total-rows existed fall back to the single VERIFY_TABLE count (+ MIN_ROWS).
+read -r tables total < <(count_all_rows "$target_url")
+table_rows="$(count_rows "$target_url" "$VERIFY_TABLE" 2>/dev/null || echo "")"
 status=succeeded
 reason=""
-if [ -n "$expected_rows" ] && [ "$records" -ne "$expected_rows" ]; then
-  status=failed; reason="expected $expected_rows rows, found $records"
-elif [ "$records" -lt "$MIN_ROWS" ]; then
-  status=failed; reason="found $records rows, fewer than MIN_ROWS=$MIN_ROWS"
+if [ -n "$expected_total" ]; then
+  log "$tables tables, $total rows in $TARGET_DB (backup had $expected_tables tables, $expected_total rows)"
+  records="$total"; expected="$expected_total"
+  if [ "$tables" -ne "$expected_tables" ]; then
+    status=failed; reason="expected $expected_tables tables, found $tables"
+  elif [ "$total" -ne "$expected_total" ]; then
+    status=failed; reason="expected $expected_total rows, found $total"
+  fi
+else
+  [ -n "$table_rows" ] || die "table $VERIFY_TABLE not found in the restored database (old backup without row counts)"
+  log "$VERIFY_TABLE has $table_rows rows in $TARGET_DB${expected_rows:+ (backup had $expected_rows)}"
+  records="$table_rows"; expected="$expected_rows"
+  if [ -n "$expected_rows" ] && [ "$table_rows" -ne "$expected_rows" ]; then
+    status=failed; reason="expected $expected_rows rows, found $table_rows"
+  elif [ "$table_rows" -lt "$MIN_ROWS" ]; then
+    status=failed; reason="found $table_rows rows, fewer than MIN_ROWS=$MIN_ROWS"
+  fi
+fi
+
+dropped=false
+if [ "${DROP_AFTER_CHECK:-false}" = "true" ]; then
+  STEP=cleanup
+  log "drill: dropping $TARGET_DB"
+  psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -qc "DROP DATABASE IF EXISTS \"$TARGET_DB\" WITH (FORCE)" && dropped=true
 fi
 
 duration=$(( $(date +%s) - started ))
 emit_result RESTORE_RESULT "$(jq -cn \
   --arg status "$status" --arg reason "$reason" --arg key "$BACKUP_KEY" --arg db "$TARGET_DB" \
   --arg tag "$image_tag" --arg table "$VERIFY_TABLE" --argjson records "$records" \
-  --arg expected "$expected_rows" --argjson duration "$duration" \
+  --arg expected "$expected" --argjson duration "$duration" --argjson dropped "$dropped" \
+  --argjson tables "$tables" --arg tableRows "$table_rows" \
   '{status: $status, backupKey: $key, targetDatabase: $db, imageTag: $tag, verifyTable: $table,
     recordsChecked: $records, expectedRecords: ($expected | if . == "" then null else tonumber end),
-    durationSeconds: $duration} + (if $reason == "" then {} else {reason: $reason} end)')"
+    tablesChecked: $tables, verifyTableRows: ($tableRows | if . == "" then null else tonumber end),
+    durationSeconds: $duration, dropped: $dropped} + (if $reason == "" then {} else {reason: $reason} end)')"
 
 [ "$status" = succeeded ] || die "verification failed: $reason"
 log "restore verified in ${duration}s"

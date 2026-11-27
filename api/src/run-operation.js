@@ -37,6 +37,23 @@ async function execute(op, message, { executor, catalog }, onStep, backup) {
     const { image, imageTag } = outcome.result
     return { ok: true, detail: { image, imageTag, sourceApp: message.sourceApp } }
   }
+  if (kind === 'drill') {
+    backup ??= await catalog.get(op.backupId)
+    if (!backup) return { ok: false, error: `backup ${op.backupId} was not found` }
+    const outcome = await executor.drill({ appId, backup, onStep })
+    if (!outcome.ok) return outcome
+    const { recordsChecked, expectedRecords = null, durationSeconds, targetDatabase, dropped = false } = outcome.result
+    return {
+      ok: true,
+      detail: { backupId: op.backupId, backupKey: backup.s3Key, recordsChecked, expectedRecords, durationSeconds, targetDatabase, dropped },
+    }
+  }
+  if (kind === 'delete') {
+    const outcome = await executor.delete({ appId, onStep })
+    if (!outcome.ok) return outcome
+    const { droppedDatabases = [], secretDeleted = false } = outcome.result
+    return { ok: true, detail: { droppedDatabases, secretDeleted } }
+  }
   throw new Error(`Unsupported operation kind: ${kind}`)
 }
 
@@ -74,5 +91,9 @@ export async function runOperation(op, message, deps, { backup, retryUnexpected 
   // A failed terminal write must reach the worker so it leaves the SQS receipt unacknowledged.
   const saved = await store.update(op.id, patch)
   if (!saved) throw new Error(`Could not save operation ${op.id}`)
+  if (saved.status === 'failed' && deps.alerts) {
+    // Best effort: an alert that can't be sent is logged, never turned into a retry of the operation.
+    await deps.alerts.operationFailed(saved).catch((err) => log.error(`could not send the failure alert: ${err.message}`))
+  }
   return saved
 }

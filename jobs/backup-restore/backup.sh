@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # pg_dump the app database and upload it to S3 as
 #   s3://$S3_BUCKET/$S3_PREFIX/<APP_NAME>/<timestamp>-<IMAGE_TAG>.dump
-# The image tag and the row count at backup time are also stored as S3 object metadata,
-# so a restore can redeploy the matching image and verify that every row came back.
+# The image tag and the row counts at backup time are also stored as S3 object metadata, so a restore
+# can redeploy the matching image and verify that every row came back. Counts cover EVERY table (works
+# for any app); VERIFY_TABLE (default notes) is an extra per-table count used by notes-app's recovery check.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
@@ -32,15 +33,17 @@ STEP=dump
 log "dumping database for $APP_NAME (image $IMAGE_TAG)"
 database="$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc 'SELECT current_database()')"
 rows="$(count_rows "$DATABASE_URL" "$VERIFY_TABLE" 2>/dev/null || echo "")"
+read -r table_count total_rows < <(count_all_rows "$DATABASE_URL")
 # Custom format (-Fc): compressed, and pg_restore can restore it into any database.
 # No owners/ACLs, so it restores cleanly under a different login.
 pg_dump --format=custom --no-owner --no-acl --dbname="$DATABASE_URL" --file="$dump"
 size=$(stat -c %s "$dump")
-log "dump of '$database' is $size bytes${rows:+, $VERIFY_TABLE has $rows rows}"
+log "dump of '$database' is $size bytes: $table_count tables, $total_rows rows${rows:+ ($VERIFY_TABLE has $rows)}"
 
 STEP=store
 log "uploading to s3://$S3_BUCKET/$key"
 metadata="app=${APP_NAME},image-tag=${safe_tag},database=${database},verify-table=${VERIFY_TABLE},trigger=${BACKUP_TRIGGER:-manual}"
+metadata="${metadata},table-count=${table_count},total-rows=${total_rows}"
 [ -n "$rows" ] && metadata="${metadata},row-count=${rows}"
 mapfile -t sse < <(sse_args)
 s3 s3 cp "$dump" "s3://$S3_BUCKET/$key" --only-show-errors --metadata "$metadata" "${sse[@]}"
@@ -50,7 +53,7 @@ log "backup finished in ${duration}s"
 emit_result BACKUP_RESULT "$(jq -cn \
   --arg app "$APP_NAME" --arg key "$key" --arg bucket "$S3_BUCKET" --arg tag "$IMAGE_TAG" \
   --arg database "$database" --arg createdAt "$(date -u -d "@$started" +%Y-%m-%dT%H:%M:%SZ)" \
-  --argjson size "$size" --argjson duration "$duration" --arg rows "$rows" \
+  --argjson size "$size" --argjson duration "$duration" --argjson total "$total_rows" --argjson tables "$table_count" \
   '{status: "succeeded", app: $app, bucket: $bucket, s3Key: $key, imageTag: $tag, database: $database,
-    sizeBytes: $size, rowCount: ($rows | if . == "" then null else tonumber end),
+    sizeBytes: $size, rowCount: $total, tableCount: $tables,
     createdAt: $createdAt, durationSeconds: $duration}')"

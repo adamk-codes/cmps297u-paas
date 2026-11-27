@@ -77,7 +77,7 @@ export class S3Catalog {
       sizeBytes: Number(object.Size ?? 0),
       image: { tag: meta['image-tag'] || parsed.tag || 'unknown', digest: meta['image-digest'] || '' },
       s3Key: object.Key,
-      ...(meta['row-count'] && { rowCount: Number(meta['row-count']) }),
+      ...((meta['total-rows'] ?? meta['row-count']) && { rowCount: Number(meta['total-rows'] ?? meta['row-count']) }),
     }
   }
 }

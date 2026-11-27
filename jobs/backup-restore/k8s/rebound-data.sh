@@ -12,6 +12,8 @@
 #   rebound-data.sh restore <app> [key|latest]    new DB + recovery app at /apps/<app>-recovery, verified
 #   rebound-data.sh isolation <app> <other_db>    prove <app>'s login can't open other_db
 #   rebound-data.sh cleanup-recovery <app>        remove the recovery app
+#   rebound-data.sh delete <app>                  remove the app, its recovery copy and database (backups kept)
+#   rebound-data.sh drill <app> [key|latest]      recovery drill: restore into a temp DB, count rows, drop it
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -20,8 +22,8 @@ ENV_FILE="${REBOUND_ENV:-$HERE/.env}"
 [ -f "$ENV_FILE" ] && set -a && source "$ENV_FILE" && set +a
 
 : "${NAMESPACE:=apps}" "${AWS_REGION:=us-east-1}" "${ALB_GROUP:=rebound}" "${MIN_ROWS:=100}"
-: "${BACKUP_SCHEDULE:=0 2 * * *}" "${S3_KMS_KEY_ID:=}" "${SECRETS_KMS_KEY_ID:=}" "${DB_PORT:=5432}"
-export NAMESPACE AWS_REGION ALB_GROUP MIN_ROWS BACKUP_SCHEDULE S3_KMS_KEY_ID SECRETS_KMS_KEY_ID
+: "${BACKUP_SCHEDULE:=0 2 * * *}" "${S3_KMS_KEY_ID:=}" "${SECRETS_KMS_KEY_ID:=}" "${DB_PORT:=5432}" "${DROP_AFTER_CHECK:=false}"
+export NAMESPACE AWS_REGION ALB_GROUP MIN_ROWS BACKUP_SCHEDULE S3_KMS_KEY_ID SECRETS_KMS_KEY_ID DROP_AFTER_CHECK
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
@@ -30,7 +32,7 @@ k() { kubectl -n "$NAMESPACE" "$@"; }
 
 TEMPLATE_VARS='${NAMESPACE} ${JOB_NAME} ${OPERATION_ID} ${APP_NAME} ${DB_NAME} ${IMAGE_TAG} ${JOBS_IMAGE}
 ${APP_IMAGE} ${S3_BUCKET} ${S3_KMS_KEY_ID} ${SECRETS_KMS_KEY_ID} ${AWS_REGION} ${BACKUP_KEY} ${TARGET_DB}
-${MIN_ROWS} ${OTHER_DATABASE} ${ALB_GROUP} ${BACKUP_SCHEDULE} ${DATA_JOBS_ROLE_ARN}'
+${MIN_ROWS} ${OTHER_DATABASE} ${ALB_GROUP} ${BACKUP_SCHEDULE} ${DATA_JOBS_ROLE_ARN} ${DROP_AFTER_CHECK}'
 render() { envsubst "$TEMPLATE_VARS" < "$HERE/$1"; }
 apply() { render "$1" | kubectl apply -f - >&2; }
 
@@ -143,7 +145,7 @@ cmd_list() {
 
 cmd_restore() {
   set_app "${1:-}"; need JOBS_IMAGE S3_BUCKET
-  local key="${2:-latest}" started active result image_tag app_url records stats served url total
+  local key="${2:-latest}" started active result image_tag app_url records stats served url total table_rows
   started=$(date +%s)
 
   # One restore at a time, across all apps in the namespace.
@@ -182,10 +184,19 @@ cmd_restore() {
   k rollout status "deploy/$APP_NAME-recovery" --timeout=300s >&2 || die "recovery app did not become ready"
 
   log "::step check"
-  # Check through the running recovery app, not just the database.
-  stats="$(k exec "deploy/$APP_NAME-recovery" -- wget -qO- "http://127.0.0.1:3000/apps/$APP_NAME-recovery/api/stats")"
-  served="$(jq -r .notes <<<"$stats")"
-  [ "$served" = "$records" ] || die "recovery app serves $served rows, restore counted $records"
+  # Check through the running recovery app, not just the database. Every app must answer /healthz
+  # (it returns 200 only when its database works). Apps that also report a record count in
+  # /api/stats (notes-app: {"notes": N}) must serve exactly what the restore counted in that table.
+  k exec "deploy/$APP_NAME-recovery" -- wget -qO- "http://127.0.0.1:3000/apps/$APP_NAME-recovery/healthz" >/dev/null \
+    || die "recovery app is running but its /healthz fails"
+  stats="$(k exec "deploy/$APP_NAME-recovery" -- wget -qO- "http://127.0.0.1:3000/apps/$APP_NAME-recovery/api/stats" 2>/dev/null || true)"
+  served="$(jq -r '.notes // empty' <<<"$stats" 2>/dev/null || true)"
+  table_rows="$(jq -r '.verifyTableRows // empty' <<<"$result")"
+  if [ -n "$served" ] && [ -n "$table_rows" ]; then
+    [ "$served" = "$table_rows" ] || die "recovery app serves $served records, the restore counted $table_rows"
+  else
+    served="$records"   # no record count to compare: healthy + every table's rows verified by the restore
+  fi
 
   url="${ALB_URL:-}"
   if [ -z "$url" ]; then
@@ -218,6 +229,56 @@ cmd_cleanup_recovery() {
   log "recovery app removed (restored databases are kept; drop them with psql if not needed)"
 }
 
+# Recovery drill (run nightly by the API, or from the dashboard): prove the backup restores, without a
+# recovery app and without keeping anything. Restore into a NEW temporary database, count the rows
+# against the backup's own count, then drop it. The live database is never touched.
+cmd_drill() {
+  set_app "${1:-}"; need JOBS_IMAGE S3_BUCKET
+  local key="${2:-latest}" active result
+  active="$(k get jobs -l rebound.io/kind=restore -o jsonpath='{range .items[*]}{.status.active}{end}')"
+  [ -z "${active//0/}" ] || die "a restore is already running; restores run one at a time"
+  if [ "$key" = latest ]; then
+    key="$(aws s3api list-objects-v2 --bucket "$S3_BUCKET" --prefix "backups/$APP_NAME/" \
+      --query 'sort_by(Contents, &LastModified)[-1].Key' --output text)"
+    [ -n "$key" ] && [ "$key" != None ] || die "no backups for $APP_NAME"
+  fi
+  export BACKUP_KEY="$key" DROP_AFTER_CHECK=true
+  export TARGET_DB="${DB_NAME:0:40}_restore_$(date -u +%Y%m%d%H%M%S)"
+  new_operation restore
+  log "::step restore"
+  log "drill $OPERATION_ID: restoring $BACKUP_KEY into temporary database $TARGET_DB"
+  apply restore-job.yaml
+  wait_job "$JOB_NAME" 1200 || true
+  result="$(job_result "$JOB_NAME" RESTORE_RESULT)"
+  [ -n "$result" ] || die "drill failed: the backup did not restore cleanly (live database untouched)"
+  log "::step check"
+  [ "$(jq -r .status <<<"$result")" = succeeded ] || die "drill failed: $(jq -r '.reason // "row count check failed"' <<<"$result")"
+  log "::step cleanup"
+  [ "$(jq -r .dropped <<<"$result")" = true ] || log "WARNING: temporary database $TARGET_DB was not dropped"
+  log "DRILL PASSED: $(jq -r .recordsChecked <<<"$result") of $(jq -r '.expectedRecords // "?"' <<<"$result") rows restored from $BACKUP_KEY"
+  echo "DRILL_RESULT $(jq -c --arg op "$OPERATION_ID" '. + {operationId: $op}' <<<"$result")"
+}
+
+# Delete an app: everything in the cluster, then its database + login (deprovision Job). S3 backups stay.
+cmd_delete() {
+  set_app "${1:-}"; need JOBS_IMAGE
+  case "$APP_NAME" in rebound*|*-recovery) die "refusing to delete platform or recovery app $APP_NAME" ;; esac
+  log "::step stop"
+  k delete cronjob "$APP_NAME-scheduled-backup" --ignore-not-found >&2
+  k delete deploy,svc,ingress -l "rebound.io/kind=recovery,rebound.io/app=$APP_NAME" --ignore-not-found >&2
+  k delete hpa "$APP_NAME" --ignore-not-found >&2   # the HPA has no rebound.io/kind label
+  k delete deploy,svc,ingress -l "rebound.io/kind=app,rebound.io/app=$APP_NAME" --ignore-not-found >&2
+  k delete secret "$APP_NAME-recovery-db" --ignore-not-found >&2
+  log "::step database"
+  new_operation deprovision
+  apply deprovision-job.yaml
+  wait_job "$JOB_NAME" 300 || die "dropping the database failed"
+  k delete secret "$APP_NAME-db" --ignore-not-found >&2
+  local r; r="$(job_result "$JOB_NAME" DEPROVISION_RESULT)"; [ -n "$r" ] || r='{"status":"succeeded"}'
+  log "$APP_NAME deleted (backups in S3 are kept)"
+  echo "DELETE_RESULT $(jq -c --arg op "$OPERATION_ID" --arg app "$APP_NAME" '. + {operationId: $op, app: $app}' <<<"$r")"
+}
+
 case "${1:-help}" in
   bootstrap) shift; cmd_bootstrap "$@" ;;
   push-image) shift; cmd_push_image "$@" ;;
@@ -228,5 +289,7 @@ case "${1:-help}" in
   restore) shift; cmd_restore "$@" ;;
   isolation) shift; cmd_isolation "$@" ;;
   cleanup-recovery) shift; cmd_cleanup_recovery "$@" ;;
+  delete) shift; cmd_delete "$@" ;;
+  drill) shift; cmd_drill "$@" ;;
   *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

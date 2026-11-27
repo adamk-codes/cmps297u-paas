@@ -24,6 +24,8 @@ export function loadConfig(env = process.env) {
     // Where operation history lives. Unset = in memory (lost on restart; fine for local dev and tests).
     platformDatabaseUrl: env.PLATFORM_DATABASE_URL || undefined,
     queueUrl: env.QUEUE_URL || undefined,
+    // SNS topic that emails the team when an operation fails (infra/foundation/alerts.tf). Unset = off.
+    alertsTopicArn: env.ALERTS_TOPIC_ARN || undefined,
 
     s3: {
       bucket: env.S3_BUCKET || 'rebound-backups',
@@ -57,6 +59,11 @@ export function loadConfig(env = process.env) {
     deployNewScript: env.DEPLOY_NEW_SCRIPT || fileURLToPath(new URL('../../deploy/deploy-new-app.sh', import.meta.url)),
     // "Deploy new app" guardrail: at most this many apps (pods, DB connections and cost are shared).
     maxApps: Number.parseInt(env.MAX_APPS || '4', 10),
+    // Nightly recovery drill (api/src/drill-scheduler.js), UTC "HH:MM", after the 02:00 scheduled backups.
+    // "off" disables it. Manual drills (dashboard button) work either way.
+    drillTime: env.DRILL_TIME ?? '03:00',
+    // Apps the dashboard can't delete (the demo app the whole platform is shown with).
+    protectedApps: (env.PROTECTED_APPS ?? 'notes-app').split(',').map((s) => s.trim()).filter(Boolean),
     // [{ "fullName": "github.com/org/repo", "defaultBranch": "main", "runtime": "Node.js 20", "sourceApp": "notes-app" }]
     // sourceApp = the ECR repository the CI pipeline pushes this repo's images to.
     approvedRepos: Array.isArray(parseJson(env.APPROVED_REPOS, 'APPROVED_REPOS'))

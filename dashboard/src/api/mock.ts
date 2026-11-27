@@ -109,6 +109,19 @@ let backups: Backup[] = [
 
 let restores: Restore[] = []
 
+// A little history so the Activity page isn't empty in mock mode.
+const pastOp = (kind: OperationKind, appId: string, startedBy: string, min: number, status: Operation['status'] = 'succeeded') => ({
+  id: `op-${randomHex(12)}`, kind, appId, status, startedBy, steps: [],
+  startedAt: minutesAgo(min), finishedAt: minutesAgo(min - 1),
+})
+const pastActivity: Operation[] = [
+  { ...pastOp('drill', 'notes-app', '', 690), startedBy: undefined }, // nightly, 03:00 UTC
+  pastOp('restore', 'notes-app', 'adam.alkhatib@example.com', 55),
+  pastOp('backup', 'notes-app', 'jason.keyrouz@example.com', 70),
+  pastOp('redeploy', 'shop-api', 'ahmad.marjeh@example.com', 180),
+  pastOp('deploy', 'shop-api', 'abdulrahman.kaddoura@example.com', 600, 'failed'),
+]
+
 interface MockOperation extends Operation {
   startedMs: number
   applied: boolean
@@ -119,14 +132,23 @@ const operations = new Map<string, MockOperation>()
 
 const STEP_TEMPLATES: Record<OperationKind, Omit<PipelineStep, 'state'>[]> = {
   deploy: [
-    { key: 'test', label: 'Test', description: 'A failed test blocks the release' },
-    { key: 'build', label: 'Build and scan', description: 'Docker image built and scanned' },
-    { key: 'store', label: 'Store image', description: 'Versioned in ECR for rollback' },
-    { key: 'release', label: 'Release', description: 'Runs on EKS on Fargate' },
+    { key: 'test', label: 'Test', description: 'Newest image that passed CI tests' },
+    { key: 'build', label: 'Build and scan', description: 'ECR scan: no critical vulnerabilities' },
+    { key: 'store', label: 'Database', description: 'Own PostgreSQL database and login' },
+    { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy' },
   ],
   redeploy: [
     { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR' },
-    { key: 'release', label: 'Release', description: 'Rolled out on EKS on Fargate' },
+    { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy' },
+  ],
+  drill: [
+    { key: 'restore', label: 'Restore', description: 'Latest backup into a temporary database' },
+    { key: 'check', label: 'Check', description: 'Every table and row checked against the backup' },
+    { key: 'cleanup', label: 'Clean up', description: 'Temporary database dropped; live app untouched' },
+  ],
+  delete: [
+    { key: 'stop', label: 'Stop', description: 'App, recovery copy and daily backup removed' },
+    { key: 'database', label: 'Database', description: 'Database and login dropped; backups kept in S3' },
   ],
   backup: [
     { key: 'dump', label: 'Back up', description: 'Database dumped by a Kubernetes Job' },
@@ -152,6 +174,7 @@ function startOperation(
     status: 'running',
     steps: STEP_TEMPLATES[kind].map((s, i) => ({ ...s, state: i === 0 ? 'running' : 'pending' })),
     startedAt: new Date().toISOString(),
+    startedBy: currentEmail(),
     startedMs: Date.now(),
     applied: false,
     onSuccess,
@@ -159,6 +182,15 @@ function startOperation(
   }
   operations.set(op.id, op)
   return publicOp(op)
+}
+
+// The signed-in mock user (lib/auth.tsx keeps it in sessionStorage), for the activity log.
+function currentEmail(): string | undefined {
+  try {
+    return (JSON.parse(sessionStorage.getItem('app-platform.user') ?? 'null') as { email?: string } | null)?.email
+  } catch {
+    return undefined
+  }
 }
 
 function advance(op: MockOperation) {
@@ -268,6 +300,40 @@ export const mockApi: PlatformApi = {
       Object.assign(app, { status: 'running', health: 'healthy', image: deployed })
       app.history = [deployed, ...app.history.filter((h) => h.tag !== tag)]
     })
+  },
+
+  async runDrill(appId) {
+    await delay()
+    const app = findApp(appId)
+    const newest = backups.find((b) => b.appId === appId && b.status === 'completed')
+    if (!newest) throw new Error(`${app.name} has no backups to test yet`)
+    if ([...operations.values()].some((o) => o.appId === appId && o.kind === 'drill' && o.status === 'running'))
+      throw new Error(`a recovery drill of ${app.name} is already running`)
+    return startOperation('drill', appId, (op) => {
+      newest.verifiedAt = new Date().toISOString()
+      op.detail = { recordsChecked: 120, expectedRecords: 120, durationSeconds: 9 }
+    })
+  },
+
+  async deleteApp(appId) {
+    await delay()
+    const app = findApp(appId)
+    if (app.id === 'notes-app') throw new Error("notes-app is the platform's demo app and can't be deleted")
+    if ([...operations.values()].some((o) => o.appId === appId && o.status === 'running'))
+      throw new Error(`${app.name} has an operation in progress; wait for it to finish`)
+    app.status = 'deploying'
+    return startOperation('delete', appId, () => {
+      apps = apps.filter((a) => a.id !== appId)
+    })
+  },
+
+  async listOperations(limit = 100) {
+    await delay(150)
+    const live = [...operations.values()]
+    live.forEach(advance)
+    return [...live.map(publicOp), ...pastActivity]
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, limit)
   },
 
   async getOperation(id) {
