@@ -17,16 +17,17 @@ Deeper docs:
 
 ## Team and ownership
 
-| Person | Area | Current task (assigned Nov 2026) |
-| --- | --- | --- |
-| Ahmad Marjeh | Infra | Terraform in `infra/`: VPC, EKS (2 × c7i-flex.large managed nodes, Kubernetes 1.35, community `terraform-aws-modules/vpc` + `eks`), ECR, RDS Postgres, S3 backup bucket, AWS Load Balancer Controller, metrics-server. Goal: `kubectl get nodes` works for everyone. |
-| Jason Keyrouz | CI/CD + deploy | GitHub Actions in `.github/workflows/`: test → Docker build → scan → push to ECR → deploy to EKS, each app at `/apps/<name>` on one shared ALB. Then the deploy part of the API, HPA autoscaling, load test. |
-| Abdulrahman Kaddoura | Data + recovery | `sample-apps/notes-app/` (Node + Express + Postgres, 100+ rows, `DATABASE_URL` + `BASE_PATH`, `/healthz`), Dockerfile + docker-compose. Then backup script/Job (pg_dump → S3) and restore script/Job (new DB + recovery URL), plus their API endpoints. |
-| Adam Al Khatib | Dashboard + docs | HTTP client implementing `PlatformApi` against the real API (switchable with the mock), dashboard on S3 + CloudFront. Later: budget field, cost page, poster draft. Owns `docs/` guides. |
+Work is split equally: each member owns one area end to end (code, its evidence for the report, its part of the
+poster and demo), one non-functional analysis, and one section of the report.
 
-**Update 2026-11-24:** Ahmad and Adam have an exam, so Abdulrahman took over their tasks for now: the Terraform
-(`infra/`), the dashboard HTTP client + Cognito sign-in, and S3 + CloudFront hosting are in PR #1. Ahmad and Adam
-should review those parts when they're back.
+| Person | Area | Owns | Report / analysis |
+| --- | --- | --- | --- |
+| Ahmad Marjeh | Infrastructure | Terraform in `infra/` (`foundation/` + `cluster/`: VPC, EKS 1.35 on 2 × c7i-flex.large, ECR, RDS Postgres, S3 + KMS, ALB controller, metrics-server, IRSA), `up.sh` / `down.sh`, SQS operations queue + worker. Goal: `kubectl get nodes` works for everyone. | AWS services table (section 3), cost analysis (`docs/cost.md`, Cost Explorer vs. estimate) |
+| Jason Keyrouz | CI/CD + deploy | GitHub Actions in `.github/workflows/` (test → build → scan → push to ECR → deploy to EKS), `deploy/` template + `deploy-app.sh`, deploy / redeploy / delete endpoints in the API, HPA autoscaling, `loadtest/`. | Scalability analysis (load test + HPA scale-out numbers) |
+| Abdulrahman Kaddoura | Data + recovery | `sample-apps/notes-app/`, `jobs/backup-restore/` (provision, backup, restore, isolation check), backup / restore / recovery-drill endpoints in the API, the recovery demo scenario. | Architecture section (section 2) and recovery evidence (restore time, record counts) |
+| Adam Al Khatib | Dashboard + platform API core | `dashboard/` (HTTP client, Cognito sign-in, costs page, budget field), dashboard hosting on S3 + CloudFront, API core (auth, operations, activity log, failure alerts), `docs/` guides, poster. | Security analysis (section 4.3) and the poster |
+
+The report abstract, AI use statement, video and pitch are shared by all four; every member presents their own area.
 
 The README's folder table says who owns which folder. Stay inside your area. If you need a change in someone
 else's folder or in a shared contract (see below), say so; don't silently edit it.
@@ -50,32 +51,33 @@ the demo or as measured evidence in the report.
   between the in-memory mock and the real API (`src/api/http.ts`) with `VITE_API_URL` / `VITE_USE_MOCK`.
   Cognito sign-in without Amplify (`src/lib/cognito.ts`, first-sign-in new password, token refresh); mocked
   when no Cognito client is configured. Checked in a browser against the real API running locally.
-- `sample-apps/notes-app/` (PR #1, branch `feature/notes-app-backup-restore`): Express + Postgres, 120 seeded
+- `sample-apps/notes-app/`: Express + Postgres, 120 seeded
   notes, `BASE_PATH`, `/healthz`, `/api/stats`, data-loss demo endpoint, RDS-safe TLS handling (`sslmode` in the
   URL), `npm test` (12 tests, no DB needed), Dockerfile, docker-compose (Postgres 16 with an admin login +
   provisioned app login, local S3 stand-in `adobe/s3mock`).
-- `jobs/backup-restore/` (same PR): one image with `provision`, `backup`, `restore`, `isolation-check`; each
+- `jobs/backup-restore/`: one image with `provision`, `backup`, `restore`, `isolation-check`; each
   prints a `*_RESULT` JSON line for the API. `k8s/` has the Job/CronJob/recovery-app manifests, the IRSA IAM
   policy, and `rebound-data.sh`, which runs every operation on EKS end to end. `demo-local.sh` runs the full
   drill locally (the earlier version passed: 120 rows backed up, 80% deleted, 120 restored and served).
-- `api/` (same PR): Node 20 + Express platform API, **data + recovery endpoints done** (backups, restores,
+- `api/`: Node 20 + Express platform API, **data + recovery endpoints done** (backups, restores,
   operations) in the dashboard's exact shapes; Cognito JWT auth, idempotency keys, one restore at a time,
   operation history in the platform DB (or memory). Runs the scripts directly (`EXECUTOR=process`) or through
   `rebound-data.sh` on EKS (`EXECUTOR=kubernetes`). Also app endpoints read from Kubernetes (list, detail,
   logs, approved repos) and **redeploy of an image from the app's history**. Dockerfile (repo-root context),
-  `k8s/api.yaml` (namespaced RBAC, `/api` on the shared ALB). 22 tests. **New-app deploy (`POST /api/apps`)
-  returns 501**: new apps go through the CI pipeline (Jason).
-- `infra/` (same PR): Terraform in two stacks. `foundation/` (keep): KMS, backup + state buckets, ECR, Cognito,
+  `k8s/api.yaml` (namespaced RBAC, `/api` on the shared ALB). Deploy new app, delete app, activity log,
+  failure alerts, nightly recovery drill, and backup/restore/redeploy run through an SQS queue.
+- `infra/`: Terraform in two stacks. `foundation/` (keep): KMS, backup + state buckets, ECR, Cognito,
   dashboard S3 + CloudFront (one HTTPS URL for dashboard, `/api`, `/apps`), GitHub OIDC CI role, budgets,
   CloudTrail. `cluster/` (each session): VPC, EKS 1.35 on 2 × c7i-flex.large, ALB controller, metrics-server, RDS, IRSA
   roles. `scripts/up.sh` / `down.sh` run a whole session. See `infra/README.md`.
-- `deploy/` (same PR): generic app template (Deployment, Service, Ingress, HPA) + `deploy-app.sh` with
+- `deploy/`: generic app template (Deployment, Service, Ingress, HPA) + `deploy-app.sh` with
   automatic rollback; used by `up.sh`, the API's redeploy, and (intended) the CI pipeline.
 - `docs/cost.md`: hourly/monthly estimate for the report (rates to be checked in the Pricing Calculator).
 - `README.md`, `.gitignore` (ignores `.env*` except `.env.example`, Terraform state, `*.tfvars`,
   `infra/backend.hcl`), `.gitattributes` (LF for `*.sh` and Dockerfiles), `.dockerignore` (repo-root builds).
 
-Not yet pushed by anyone: `.github/workflows/` (Jason's pipeline).
+- `.github/workflows/`: CI pipeline for notes-app (test, build, scan, push to ECR, deploy); `loadtest/` with first
+  results.
 
 Verified locally (2026-11-24): both Terraform stacks pass `init` + `validate` (vpc 6.8, eks 21.30, iam 6.11, AWS
 provider 6.74, Helm 3.3; lock files committed). `demo-local.sh --fresh` passes end to end (provision, isolation
@@ -90,7 +92,7 @@ against Postgres (local runs use the in-memory store).
 ## How it gets deployed (the short version)
 
 - **One AWS account, one region (us-east-1).** Everyone works against the same account; there is no
-  multi-account setup and nothing has to talk across accounts. Ahmad's Terraform creates everything; the
+  multi-account setup and nothing has to talk across accounts. The Terraform in `infra/` creates everything; the
   others get cluster access (`kubectl`) to it.
 - **Everything is created at the start of a work session and destroyed at the end** (`terraform apply` …
   `terraform destroy`) because EKS, NAT gateway, ALB and nodes bill by the hour. Budget is about $41 of AWS

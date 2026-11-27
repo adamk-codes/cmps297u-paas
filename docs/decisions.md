@@ -6,15 +6,15 @@
 | --- | --- | --- |
 | EKS **on Fargate** | EKS 1.35 with a **managed node group, 2 × c7i-flex.large** | Simpler for the ALB controller, metrics-server/HPA and Jobs. Fallback in the proposal was ECS on Fargate. Nodes were first planned as t3.medium; switched to c7i-flex.large (2 vCPU, 4 GiB, same memory) because our AWS account is on the **Free plan**, which only allows Free-plan-eligible instance types (PR #2). Kubernetes 1.35 on **standard support**, so no extended-support surcharge on the control plane. |
 | One URL per app (host-based) | One shared ALB, **path-based** `/apps/<name>` | Hence every app must honour `BASE_PATH`. |
-| Two sample apps, owned by Adam | `notes-app` owned by Abdulrahman | Who builds the second app (the mock shows `shop-api`) is not assigned yet. |
-| Dashboard hosting unspecified | S3 + CloudFront | Adam's task. |
+| Two sample apps | `notes-app` built; a second app (`shop-api` in the mock) is optional | Needed only for the cross-app isolation demo. |
+| Dashboard hosting unspecified | S3 + CloudFront | One HTTPS URL for dashboard, API and apps. |
 | Product unnamed | **Rebound** | Dashboard rebrand, commit `0d03180`. |
 
 Unchanged: one region, one shared RDS with a database + login per app, backups as `pg_dump` files (not RDS
 snapshots), restore into a new database at a recovery URL, Cognito sign-in, Terraform for everything, create and
 destroy per work session, budget alerts.
 
-## Data + recovery design decisions (Abdulrahman, Nov 2026)
+## Data + recovery design decisions (Nov 2026)
 
 | Decision | Why | Trade-off |
 | --- | --- | --- |
@@ -59,6 +59,6 @@ destroy per work session, budget alerts.
 9. **RDS details for the jobs**: Postgres major version (jobs image client must be ≥), master secret in
    Secrets Manager (`manage_master_user_password`), an IRSA role with `jobs/backup-restore/k8s/iam-policy.json`,
    and ECR repo `rebound/backup-restore`. Ask Ahmad.
-6. **Second sample app**: who builds it, and is it needed for the "users can't read each other's data" demo
+6. **Second sample app**: is it needed for the "users can't read each other's data" demo
    (success criterion 1 requires two apps)?
 7. **Branching**: work directly on `main` (current practice) or feature branches + PRs?

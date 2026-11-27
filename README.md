@@ -10,15 +10,15 @@ deployment, gets an application URL, and can back up and restore its data — al
 
 | Folder | What lives there | Owner |
 | --- | --- | --- |
-| `dashboard/` | React dashboard (Cognito sign-in, apps, deploys, backups) | Adam |
-| `sample-apps/` | Sample Node.js apps (`notes-app/`: Express + Postgres, Dockerfile, docker-compose) | Abdulrahman (notes-app) / Adam |
-| `jobs/` | Backup and restore job image (`jobs/backup-restore/`: pg_dump to S3, restore into a new DB + verify) | Abdulrahman |
-| `api/` | Platform API (Node + Express): backups, restores, operations done; deploy endpoints next | Abdulrahman (data) / Jason (deploy) |
-| `infra/` | Terraform: `foundation/` (KMS, S3, ECR, Cognito, CloudFront, CI role, budgets, CloudTrail) and `cluster/` (VPC, EKS, ALB controller, RDS, IRSA); `scripts/up.sh`, `down.sh` | Ahmad (drafted by Abdulrahman) |
-| `deploy/` | Generic app template (Deployment, Service, Ingress, HPA) and `deploy-app.sh` | Jason / Abdulrahman |
-| `loadtest/` | k6 load test as a Kubernetes Job + `run.sh`, which records the HPA scale-out (scalability evidence) | Jason (drafted by Abdulrahman) |
+| `infra/` | Terraform: `foundation/` (KMS, S3, ECR, Cognito, CloudFront, CI role, budgets, CloudTrail) and `cluster/` (VPC, EKS, ALB controller, RDS, IRSA); `scripts/up.sh`, `down.sh` | Ahmad |
 | `.github/workflows/` | CI/CD: test, build, scan, push to ECR, release | Jason |
-| `docs/` | Architecture, decisions, submission checklist, cost estimate; later the guides | Adam / all |
+| `deploy/` | Generic app template (Deployment, Service, Ingress, HPA) and `deploy-app.sh` | Jason |
+| `loadtest/` | k6 load test as a Kubernetes Job + `run.sh`, which records the HPA scale-out (scalability evidence) | Jason |
+| `sample-apps/` | Sample Node.js apps (`notes-app/`: Express + Postgres, Dockerfile, docker-compose) | Abdulrahman |
+| `jobs/` | Backup and restore job image (`jobs/backup-restore/`: pg_dump to S3, restore into a new DB + verify) | Abdulrahman |
+| `dashboard/` | React dashboard (Cognito sign-in, apps, deploys, backups, costs), hosted on S3 + CloudFront | Adam |
+| `api/` | Platform API (Node + Express) | Shared: core, auth, operations, activity log, alerts (Adam); deploy endpoints (Jason); backup/restore endpoints (Abdulrahman); SQS queue + worker (Ahmad) |
+| `docs/` | Architecture, decisions, submission checklist, cost estimate, report and poster drafts | All (each writes their own section) |
 
 Folders are added as each part of the project starts. Context for contributors and coding agents: [AGENTS.md](AGENTS.md).
 

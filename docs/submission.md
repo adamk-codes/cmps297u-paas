@@ -22,11 +22,21 @@ demo recommended. **Every member presents and must be able to answer questions a
 | Architecture and design choices | 20 | Coherent; choices and trade-offs justified | `docs/architecture.md`, `docs/decisions.md` (Fargate → nodes, path routing, pg_dump vs. snapshots, single-AZ RDS) |
 | Completeness and functionality (demo) | 25 | Core functionality works **end to end** in the demo | Deploy via pipeline → app URL → backup → simulated data loss → restore → recovery URL verified. A failing test blocks a release. Redeploy an old image |
 | Security analysis | 7 | Risks clearly connected to implemented measures | Per-app DB login (show one app can't read the other's DB), IAM role per workload (IRSA), SSE-KMS backups, Secrets Manager, HTTPS, image scan, CloudTrail |
-| Scalability analysis | 7 | Capacity, bottlenecks, limits **with evidence** | Load test + HPA scale-out numbers (Jason); restore duration vs. dump size (Abdulrahman); RDS connections as the bottleneck |
+| Scalability analysis | 7 | Capacity, bottlenecks, limits **with evidence** | Load test + HPA scale-out numbers; restore duration vs. dump size; RDS connections as the bottleneck |
 | Cost analysis | 6 | Monthly estimate: assumptions, per-service costs, total | Pricing calculator, us-east-1, stated hours; compare to real spend from Cost Explorer |
 | Individual Q&A | 20 | Explains system, design, analysis, **own contribution** | Everyone reads `AGENTS.md` + `docs/` before presenting |
 
 Group score (80) is shared; Q&A (20) is individual.
+
+## Who does what (equal split)
+
+| Member | Report | Poster / video / pitch |
+| --- | --- | --- |
+| Ahmad | 3. AWS services used; 4.2 cost analysis | Infrastructure part of the diagram; demo of `up.sh` / cluster |
+| Jason | 4.1 scalability analysis | CI/CD part; demo of deploy, failing test blocks release, HPA under load |
+| Abdulrahman | 2. AWS architecture; recovery numbers | Data + recovery part; demo of backup, data loss, restore, recovery URL |
+| Adam | 4.3 security analysis | Poster layout; demo of dashboard sign-in, operations, costs page |
+| All | 1. Abstract, 5. AI use statement, references | Each presents their own area |
 
 ## Drafts
 

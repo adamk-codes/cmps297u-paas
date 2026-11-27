@@ -39,7 +39,7 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
 
 ## Flows
 
-### Deploy (Jason)
+### Deploy
 
 1. Push / dashboard "Deploy" on an approved repo triggers the reusable GitHub Actions workflow.
 2. `npm test` — a failure stops here (step `test` fails, nothing is released).
@@ -48,7 +48,7 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
    `BASE_PATH=/apps/<name>`, `DATABASE_URL` from a Secret, `IMAGE_TAG=<tag>` (`release`).
 5. Redeploy = re-apply a previous tag from ECR (`pull`, `release`).
 
-### Backup (Abdulrahman)
+### Backup
 
 1. API (manual) or a CronJob (scheduled, 02:00 UTC in the mock) starts a backup Job for `<app>`.
 2. The Job reads the app's `DATABASE_URL` and the **currently running image tag** of the app.
@@ -56,7 +56,7 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
    (steps `dump`, `store`).
 4. Record the backup (size, key, image tag/digest, status) in the platform DB so `listBackups` can return it.
 
-### Restore + verify (Abdulrahman)
+### Restore + verify
 
 1. API rejects the request if another restore is running (one at a time).
 2. Restore Job downloads the dump, `CREATE DATABASE <appdb>_restore_<stamp>`, `pg_restore --no-owner` into it
@@ -79,8 +79,8 @@ GitHub Actions: test → build → scan → push to ECR → deploy to EKS
 | Backup key | `backups/<app>/<timestamp>-<imageTag>.dump` | `backups/notes-app/20261124T183000Z-3f9c2ab.dump` |
 | Timestamp in keys | UTC, `YYYYMMDDTHHMMSSZ` (no `:` so it's S3/shell safe) | `20261124T183000Z` |
 
-The timestamp format and image-tag value (git short SHA vs. semver) are proposals; agree with Jason, whose
-pipeline produces the tag. The dashboard mock currently uses a different key format and `*.appplatform.internal`
+The timestamp format and image-tag value (git short SHA vs. semver) are proposals; they must match what the CI
+pipeline produces. The dashboard mock currently uses a different key format and `*.appplatform.internal`
 host-style URLs; those are placeholders and will follow this table once the real API exists.
 
 ## Local development (no AWS)
