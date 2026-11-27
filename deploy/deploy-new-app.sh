@@ -25,10 +25,16 @@ REBOUND_DATA="${REBOUND_DATA:-$HERE/../jobs/backup-restore/k8s/rebound-data.sh}"
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 
 echo "::step test" >&2
-# Only images ECR scans (plain manifests; CI builds with --provenance=false) have imageScanStatus.
-TAG="$(aws ecr describe-images --region "$AWS_REGION" --repository-name "$SOURCE_APP" --filter tagStatus=TAGGED \
-  --query 'reverse(sort_by(imageDetails[?imageScanStatus!=`null`],&imagePushedAt))[0].imageTags[0]' --output text)"
-[ -n "$TAG" ] && [ "$TAG" != "None" ] || { echo "ERROR: no CI-built image of $SOURCE_APP in ECR" >&2; exit 1; }
+# Newest tagged image that ECR has scanned. describe-images doesn't always report imageScanStatus, so ask
+# describe-image-scan-findings (what CI uses) for each tag, newest first, and take the first with a scan.
+TAG=""
+for t in $(aws ecr describe-images --region "$AWS_REGION" --repository-name "$SOURCE_APP" --filter tagStatus=TAGGED \
+    --query 'reverse(sort_by(imageDetails,&imagePushedAt))[:20].imageTags[0]' --output text); do
+  status="$(aws ecr describe-image-scan-findings --region "$AWS_REGION" --repository-name "$SOURCE_APP" \
+    --image-id imageTag="$t" --query 'imageScanStatus.status' --output text 2>/dev/null || true)"
+  case "$status" in COMPLETE|IN_PROGRESS|PENDING|ACTIVE) TAG="$t"; break ;; esac
+done
+[ -n "$TAG" ] && [ "$TAG" != "None" ] || { echo "ERROR: no scanned image of $SOURCE_APP in ECR" >&2; exit 1; }
 IMAGE="$ECR_REGISTRY/$SOURCE_APP:$TAG"
 log "newest CI image: $IMAGE"
 
