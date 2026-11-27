@@ -6,6 +6,20 @@ CMPS 297U Cloud Computing — Group 4: Ahmad Marjeh · Jason Keyrouz · Abdulrah
 A team member signs in, picks an approved GitHub repo, requests a PostgreSQL database, starts a
 deployment, gets an application URL, and can back up and restore its data — all from one dashboard.
 
+## Team and task split
+
+Work is split equally: each member owns one area end to end (code, evidence, part of the poster and demo) and one
+section of the report.
+
+| Member | Area | Owns | Report section | Demo |
+| --- | --- | --- | --- | --- |
+| Ahmad Marjeh | Infrastructure | `infra/` (Terraform: VPC, EKS, ECR, RDS, S3 + KMS, ALB controller, IRSA), `up.sh` / `down.sh`, SQS operations queue + worker | 3. AWS services used; 4.2 cost analysis | Bringing the cluster up |
+| Jason Keyrouz | CI/CD + deploy | `.github/workflows/`, `deploy/`, deploy / redeploy / delete endpoints, HPA autoscaling, `loadtest/` | 4.1 scalability analysis | Deploy, failing test blocks a release, autoscaling under load |
+| Abdulrahman Kaddoura | Data + recovery | `sample-apps/notes-app/`, `jobs/backup-restore/`, backup / restore / recovery-drill endpoints | 2. AWS architecture; recovery numbers | Backup, data loss, restore, recovery URL |
+| Adam Al Khatib | Dashboard + platform API core | `dashboard/` (Cognito sign-in, costs page), S3 + CloudFront hosting, API core (auth, operations, activity log, alerts), poster | 4.3 security analysis | Dashboard sign-in, operations, costs |
+
+Shared by all four: the abstract, AI use statement, references, video, and pitch (each presents their own area).
+
 ## Repository layout
 
 | Folder | What lives there | Owner |
