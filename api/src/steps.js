@@ -13,6 +13,12 @@ export const STEP_TEMPLATES = {
     { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR' },
     { key: 'release', label: 'Release', description: 'Rolled out on EKS' },
   ],
+  deploy: [
+    { key: 'test', label: 'Test', description: 'Newest image that passed CI tests' },
+    { key: 'build', label: 'Build and scan', description: 'ECR scan: no critical vulnerabilities' },
+    { key: 'store', label: 'Database', description: 'Own PostgreSQL database and login' },
+    { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy' },
+  ],
 }
 
 // Script log step names -> dashboard step keys.
@@ -22,6 +28,7 @@ const STEP_ALIASES = {
   backup: { dump: 'dump', store: 'store' },
   restore: { download: 'restore', restore: 'restore', run: 'run', check: 'check' },
   redeploy: { pull: 'pull', release: 'release' },
+  deploy: { test: 'test', build: 'build', store: 'store', release: 'release' }, // deploy-new-app.sh
 }
 
 export function stepKeyFor(kind, logStep) {

@@ -12,7 +12,8 @@ import { HttpError } from './operations.js'
 //   getLogs(appId)        GET  /api/apps/:appId/logs
 //   redeploy(appId, tag)  POST /api/apps/:appId/redeploy {imageTag} -> 202 Operation
 //   listApprovedRepos()   GET  /api/repos
-//   deploy(req)           POST /api/apps -> 501 (new apps go through the CI pipeline)
+//   deploy(req)           POST /api/apps {repo, name, createDatabase} -> 202 Operation
+//                         (releases the newest CI-built, scanned image of the repo under a new name + new DB)
 //   getCosts()            GET  /api/costs                         (Cost Explorer + Budgets, cached)
 //   updateBudget(limit)   PUT  /api/costs/budget {limitUsd}
 export function createApp({ operations, apps, costs, config, verifier }) {
@@ -93,10 +94,31 @@ export function createApp({ operations, apps, costs, config, verifier }) {
     res.json(await costs.updateBudget(req.body?.limitUsd))
   }))
 
-  // New apps are built by the CI pipeline (test -> build -> scan -> push), not by the API.
-  app.post('/api/apps', (_req, res) => {
-    res.status(501).json({ error: 'New deployments run through the GitHub Actions pipeline; push to main to deploy.' })
-  })
+  // New app: the platform never builds code. CI (test -> build -> scan -> push) produced the image; this
+  // releases the newest one of the repo's sourceApp under a new name, with its own database and login.
+  const APP_NAME = /^[a-z][a-z0-9-]{1,28}[a-z0-9]$/ // same rule as the dashboard (3-30 chars)
+  app.post('/api/apps', wrap(async (req, res) => {
+    const { repo, name, createDatabase } = req.body ?? {}
+    const approved = config.approvedRepos.find((r) => r.fullName === repo)
+    if (!approved) throw new HttpError(400, 'Only repositories pre-approved by your team are deployable')
+    if (!approved.sourceApp) throw new HttpError(400, `${repo} has no CI image to deploy (sourceApp is not set)`)
+    if (typeof name !== 'string' || !APP_NAME.test(name)) {
+      throw new HttpError(400, 'Use 3 to 30 lowercase letters, numbers, and hyphens; start with a letter')
+    }
+    if (name.startsWith('rebound') || name.endsWith('-recovery')) {
+      throw new HttpError(400, `"${name}" is reserved for the platform`)
+    }
+    if (createDatabase === false) {
+      throw new HttpError(400, 'Apps from this repository need a PostgreSQL database; keep the box ticked')
+    }
+    const existing = await apps.list()
+    if (existing.some((a) => a.id === name)) throw new HttpError(409, `An app named "${name}" already exists`)
+    if (existing.filter((a) => !a.id.endsWith('-recovery')).length >= config.maxApps) {
+      throw new HttpError(409, `This platform runs at most ${config.maxApps} apps; delete one first`)
+    }
+    const op = await operations.startDeploy(name, { sourceApp: approved.sourceApp, repo, idempotencyKey: idem(req) })
+    res.status(202).location(`/api/operations/${op.id}`).json(op)
+  }))
 
   // ---- backups and restores ----
 

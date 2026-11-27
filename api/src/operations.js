@@ -50,24 +50,35 @@ export class Operations {
     return this.start('redeploy', appId, { idempotencyKey, imageTag })
   }
 
+  // New app (dashboard "Deploy new app"). The caller checks the repo is approved and the name is free.
+  async startDeploy(appId, { sourceApp, repo, idempotencyKey } = {}) {
+    if (!APP_ID.test(appId ?? '')) throw new HttpError(400, 'invalid app name')
+    if (!APP_ID.test(sourceApp ?? '')) throw new HttpError(400, 'invalid source app')
+    return this.start('deploy', appId, { idempotencyKey, sourceApp, repo })
+  }
+
   async get(id) {
     const op = await this.store.get(id)
     if (!op) throw new HttpError(404, `operation ${id} was not found`)
     return op
   }
 
-  async start(kind, appId, { idempotencyKey, backupId, imageTag }, backup) {
+  async start(kind, appId, { idempotencyKey, backupId, imageTag, sourceApp, repo }, backup) {
     validateKey(idempotencyKey)
     const op = {
       id: `op-${randomUUID()}`, kind, appId, status: 'running',
       steps: initialSteps(kind), startedAt: this.now().toISOString(),
       ...(backupId && { backupId }), ...(idempotencyKey && { idempotencyKey }),
     }
-    const message = { operationId: op.id, kind, appId, ...(backupId && { backupId }), ...(imageTag && { imageTag }) }
+    const message = {
+      operationId: op.id, kind, appId, ...(backupId && { backupId }), ...(imageTag && { imageTag }),
+      ...(sourceApp && { sourceApp }), ...(repo && { repo }),
+    }
     const saved = await this.store.create(op, this.queue ? message : undefined)
     if (saved.id !== op.id) {
       if ((idempotencyKey && saved.idempotencyKey === idempotencyKey) || kind === 'backup') return saved
       const reason = kind === 'restore' ? 'A restore is already running. Restores run one at a time.'
+        : kind === 'deploy' ? `${appId} is already being deployed`
         : `a rollout of ${appId} is already running`
       throw new HttpError(409, reason, { operationId: saved.id })
     }

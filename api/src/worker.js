@@ -13,7 +13,8 @@ export async function processDelivery({ message, receipt }, deps) {
   if (op?.status === 'running') {
     if (message.kind !== op.kind || message.appId !== op.appId ||
         message.backupId !== op.backupId ||
-        (op.kind === 'redeploy' && !/^[A-Za-z0-9._-]{1,128}$/.test(message.imageTag ?? ''))) {
+        (op.kind === 'redeploy' && !/^[A-Za-z0-9._-]{1,128}$/.test(message.imageTag ?? '')) ||
+        (op.kind === 'deploy' && !/^[a-z0-9][a-z0-9-]{0,40}$/.test(message.sourceApp ?? ''))) {
       throw new Error(`Queue message does not match operation ${op.id}`)
     }
     log.info(`Picked up ${op.id} (${op.kind} ${op.appId})`)

@@ -117,6 +117,23 @@ data "aws_iam_policy_document" "api" {
     actions   = ["budgets:ViewBudget", "budgets:ModifyBudget"]
     resources = ["arn:aws:budgets::${local.account_id}:budget/${var.name}-monthly"]
   }
+  # "Deploy new app" (deploy/deploy-new-app.sh): find the newest CI image and its scan result,
+  # then copy the new app's DB login from Secrets Manager into a Kubernetes Secret.
+  statement {
+    sid       = "NewAppImages"
+    actions   = ["ecr:DescribeImages", "ecr:DescribeImageScanFindings"]
+    resources = ["arn:aws:ecr:${var.region}:${local.account_id}:repository/*"]
+  }
+  statement {
+    sid       = "NewAppDatabaseLogin"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${var.name}/apps/*"]
+  }
+  statement {
+    sid       = "NewAppDatabaseLoginKey"
+    actions   = ["kms:Decrypt"]
+    resources = [local.kms_arn]
+  }
 }
 
 resource "aws_iam_role_policy" "api" {

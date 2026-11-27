@@ -80,10 +80,10 @@ export function Pipeline({ title, steps, op }: { title: string; steps: PipelineS
 }
 
 export const DEPLOY_STEPS: PipelineStep[] = [
-  { key: 'test', label: 'Test', description: 'A failed test blocks the release', state: 'pending' },
-  { key: 'build', label: 'Build and scan', description: 'Docker image built and scanned', state: 'pending' },
-  { key: 'store', label: 'Store image', description: 'Versioned in ECR for rollback', state: 'pending' },
-  { key: 'release', label: 'Release', description: 'Runs on EKS on Fargate', state: 'pending' },
+  { key: 'test', label: 'Test', description: 'Newest image that passed CI tests', state: 'pending' },
+  { key: 'build', label: 'Build and scan', description: 'ECR scan: no critical vulnerabilities', state: 'pending' },
+  { key: 'store', label: 'Database', description: 'Own PostgreSQL database and login', state: 'pending' },
+  { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy', state: 'pending' },
 ]
 
 export const RESTORE_STEPS: PipelineStep[] = [
@@ -94,5 +94,5 @@ export const RESTORE_STEPS: PipelineStep[] = [
 
 export const REDEPLOY_STEPS: PipelineStep[] = [
   { key: 'pull', label: 'Pull image', description: 'Previous image fetched from ECR', state: 'pending' },
-  { key: 'release', label: 'Release', description: 'Rolled out on EKS on Fargate', state: 'pending' },
+  { key: 'release', label: 'Release', description: 'Rolled out on EKS, rolls back if unhealthy', state: 'pending' },
 ]

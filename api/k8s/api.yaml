@@ -80,6 +80,7 @@ data:
   QUEUE_URL: "${QUEUE_URL}"
   S3_BUCKET: "${S3_BUCKET}"
   S3_KMS_KEY_ID: "${S3_KMS_KEY_ID}"
+  SECRETS_KMS_KEY_ID: "${SECRETS_KMS_KEY_ID}"
   JOBS_IMAGE: "${JOBS_IMAGE}"
   ECR_REGISTRY: "${ECR_REGISTRY}"
   APP_IMAGE_REPO: "${APP_IMAGE_REPO}"
@@ -91,7 +92,8 @@ data:
   PUBLIC_URL: "${DASHBOARD_ORIGIN}"
   AWS_ACCOUNT_ID: "${AWS_ACCOUNT_ID}"
   BUDGET_NAME: rebound-monthly
-  APPROVED_REPOS: '[{"fullName":"github.com/adamk-codes/cmps297u-paas","defaultBranch":"main","runtime":"Node.js 20"}]'
+  APPROVED_REPOS: '[{"fullName":"github.com/adamk-codes/cmps297u-paas","defaultBranch":"main","runtime":"Node.js 20","sourceApp":"notes-app"}]'
+  MAX_APPS: "4"
   CORS_ORIGINS: "${DASHBOARD_ORIGIN}"
 ---
 apiVersion: apps/v1

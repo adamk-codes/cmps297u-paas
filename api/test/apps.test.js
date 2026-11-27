@@ -90,7 +90,7 @@ test('kubernetes apps source queries the apps namespace by label', async () => {
   assert.deepEqual(calls[0], ['kubectl', '-n', 'apps', 'get', 'deploy,rs,pods', '-l', 'rebound.io/kind=app', '-o', 'json'])
 })
 
-test('app routes: list with last backup, redeploy only known images, deploy is 501', async () => {
+test('app routes: list with last backup, redeploy only known images, deploy rejects unapproved repos', async () => {
   const [app] = appsFromKube(kubeList, { publicUrl: 'https://d' })
   const redeploys = []
   const executor = {
@@ -127,7 +127,7 @@ test('app routes: list with last backup, redeploy only known images, deploy is 5
     assert.equal((await (await fetch(`${base}/api/operations/${op.id}`)).json()).status, 'succeeded')
     assert.equal(redeploys[0].imageTag, '3f9c2ab')
 
-    assert.equal((await post('/api/apps', { repo: 'x', name: 'y', createDatabase: true })).status, 501)
+    assert.equal((await post('/api/apps', { repo: 'x', name: 'y', createDatabase: true })).status, 400)
   } finally {
     server.closeAllConnections()
     await new Promise((r) => server.close(r))
