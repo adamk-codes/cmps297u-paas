@@ -212,7 +212,8 @@ cmd_restore() {
     --arg image "$APP_IMAGE" --argjson total "$total" --argjson served "$served" \
     '{operationId: $op, status: "succeeded", backupKey, targetDatabase, recoveryUrl: $url, image: $image,
       recordsChecked, expectedRecords, recordsServed: $served, restoreSeconds: .durationSeconds,
-      durationSeconds: $total}' <<<"$result")"
+      durationSeconds: $total, contentChecked: (.contentChecked // false)}
+     + (if .contentNote then {contentNote} else {} end)' <<<"$result")"
 }
 
 cmd_isolation() {
@@ -259,7 +260,7 @@ cmd_drill() {
   [ "$(jq -r .status <<<"$result")" = succeeded ] || die "drill failed: $(jq -r '.reason // "row count check failed"' <<<"$result")"
   log "::step cleanup"
   [ "$(jq -r .dropped <<<"$result")" = true ] || log "WARNING: temporary database $TARGET_DB was not dropped"
-  log "DRILL PASSED: $(jq -r .recordsChecked <<<"$result") of $(jq -r '.expectedRecords // "?"' <<<"$result") rows restored from $BACKUP_KEY"
+  log "DRILL PASSED: $(jq -r .recordsChecked <<<"$result") of $(jq -r '.expectedRecords // "?"' <<<"$result") rows restored from $BACKUP_KEY$(jq -r 'if .contentChecked then ", every value matched" else "" end' <<<"$result")"
   echo "DRILL_RESULT $(jq -c --arg op "$OPERATION_ID" '. + {operationId: $op}' <<<"$result")"
 }
 

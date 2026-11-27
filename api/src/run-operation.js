@@ -12,10 +12,11 @@ async function execute(op, message, { executor, catalog }, onStep, backup) {
     if (!backup) return { ok: false, error: `backup ${op.backupId} was not found` }
     const outcome = await executor.restore({ appId, backup, onStep })
     if (!outcome.ok) return outcome
-    const { targetDatabase, recoveryUrl, recordsChecked, durationSeconds, restoreSeconds, image } = outcome.result
+    const { targetDatabase, recoveryUrl, recordsChecked, durationSeconds, restoreSeconds, image, contentChecked = false, contentNote } = outcome.result
     return {
       ok: true,
-      result: { backupId: op.backupId, targetDatabase, recoveryUrl, recordsChecked, durationSeconds },
+      // contentChecked: every value in every row matched the backup's fingerprint, not only the row counts.
+      result: { backupId: op.backupId, targetDatabase, recoveryUrl, recordsChecked, durationSeconds, contentChecked, ...(contentNote && { contentNote }) },
       detail: { restoreSeconds, image, backupKey: backup.s3Key },
     }
   }
@@ -47,10 +48,13 @@ async function execute(op, message, { executor, catalog }, onStep, backup) {
     if (!backup) return { ok: false, error: `backup ${op.backupId} was not found` }
     const outcome = await executor.drill({ appId, backup, onStep })
     if (!outcome.ok) return outcome
-    const { recordsChecked, expectedRecords = null, durationSeconds, targetDatabase, dropped = false } = outcome.result
+    const { recordsChecked, expectedRecords = null, durationSeconds, targetDatabase, dropped = false, contentChecked = false, contentNote } = outcome.result
     return {
       ok: true,
-      detail: { backupId: op.backupId, backupKey: backup.s3Key, recordsChecked, expectedRecords, durationSeconds, targetDatabase, dropped },
+      detail: {
+        backupId: op.backupId, backupKey: backup.s3Key, recordsChecked, expectedRecords, durationSeconds, targetDatabase, dropped,
+        contentChecked, ...(contentNote && { contentNote }),
+      },
     }
   }
   if (kind === 'undo') {

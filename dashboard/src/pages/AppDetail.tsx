@@ -126,8 +126,8 @@ function DrillModal({ appId, appName, onClose, onChanged }: { appId: string; app
     <Modal title="Test the latest backup" onClose={onClose} size="md">
       <p className="text-[15px] text-slate-600">
         A recovery drill restores <span className="font-medium text-slate-900">{appName}</span>'s newest backup into a
-        temporary database, checks that every table came back with exactly the rows the backup had, then
-        deletes the copy. It works for any app, whatever its tables. The live app is never touched.
+        temporary database, checks that every table came back with exactly the rows and values the backup had,
+        then deletes the copy. It works for any app, whatever its tables. The live app is never touched.
         Rebound runs this by itself every night at 5:00 AM Beirut time.
       </p>
       {error && (
@@ -141,7 +141,9 @@ function DrillModal({ appId, appName, onClose, onChanged }: { appId: string; app
           <span>
             Backup verified: {d?.recordsChecked ?? '?'}
             {d?.expectedRecords != null && ` of ${d.expectedRecords}`} rows restored and checked
-            {d?.durationSeconds != null && ` in ${d.durationSeconds}s`}. The temporary copy was deleted.
+            {d?.durationSeconds != null && ` in ${d.durationSeconds}s`}
+            {d?.contentChecked ? ', and every value in every row matched the backup' : ''}. The temporary copy was deleted.
+            {!d?.contentChecked && d?.contentNote && <span className="mt-1 block text-xs">Content: {d.contentNote}.</span>}
           </span>
         </div>
       )}

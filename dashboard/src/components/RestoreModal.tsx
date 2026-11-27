@@ -96,6 +96,12 @@ export function RestoreModal({
               <dd className="font-medium text-slate-900">{result.recordsChecked.toLocaleString()}</dd>
             </div>
             <div>
+              <dt className="text-recover-dark">Row contents</dt>
+              <dd className="font-medium text-slate-900" title={result.contentNote}>
+                {result.contentChecked ? 'Match the backup exactly' : 'Counted only'}
+              </dd>
+            </div>
+            <div>
               <dt className="text-recover-dark">Recovery time</dt>
               <dd className="font-medium text-slate-900">{formatDuration(result.durationSeconds)}</dd>
             </div>

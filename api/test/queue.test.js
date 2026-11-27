@@ -77,7 +77,7 @@ test('only one queued restore is admitted and the worker returns the dashboard R
   assert.deepEqual(sent, [{ operationId: started.id, kind: 'restore', appId: 'notes', backupId: backup.id }])
   await processDelivery({ message: sent[0], receipt: 'restore' }, deps)
   const done = await ops.get(started.id)
-  assert.deepEqual(done.result, { backupId: backup.id, ...restored })
+  assert.deepEqual(done.result, { backupId: backup.id, ...restored, contentChecked: false }) // older executor result: counts only
   assert.deepEqual(done.steps.map((s) => s.key), ['restore', 'run', 'check'])
 })
 
